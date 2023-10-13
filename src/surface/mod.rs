@@ -5,6 +5,7 @@ use std::ptr::null;
 use std::sync::Arc;
 
 use ash::vk;
+use bitflags::bitflags;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
 use crate::gpu::Gpu;
@@ -19,21 +20,138 @@ mod window;
 
 use self::swapchain_info::SwapchainInfo;
 
-/// Some additional configuration for the swapchain.
-///
-/// Those parameters may change during the lifetime of the program, and the swapchain will have
-/// to be recreated if they do.
-#[derive(Debug, Clone)]
-pub struct SurfaceConfig {
-    /// The width of swapchain images.
-    pub width: u32,
-    /// The height of swapchain images.
-    pub height: u32,
-}
-
 /// A trait for surfaces on which we can render.
 pub trait SurfaceTarget: HasWindowHandle + HasDisplayHandle {}
 impl<T: HasWindowHandle + HasDisplayHandle> SurfaceTarget for T {}
+
+/// A presentation mode that can be used for a [`Surface`].
+#[derive(Debug, Clone, Copy)]
+#[repr(u8)]
+pub enum PresentMode {
+    /// The presentation engine won't wait for the vertical blanking period of the display to
+    /// update the current image.
+    ///
+    /// This *may* result in visible tearing.
+    ///
+    /// No queuing operation are performed by the presentation engine as requests are
+    /// immediately processed.
+    Immediate = vk::PresentModeKHR::IMMEDIATE.as_raw() as _,
+
+    /// The presentation engine waits for the next vertical blanking period of the display to
+    /// update the current image.
+    ///
+    /// Tearing *cannot* be observed.
+    ///
+    /// An internal single-entry queue is kept to hold the latest presentation request. If the
+    /// queue is full when a new presentation request is received, the new request replaces the
+    /// existing entry and resources associated with the existing entry become available for
+    /// re-use by the application.
+    ///
+    /// On each vertical blanking period of the display, the presentation engine removes the
+    /// entry at the front of the queue and uses it to update the current image.
+    Mailbox = vk::PresentModeKHR::MAILBOX.as_raw() as _,
+
+    /// The presentation engine waits for the next vertical blanking period of the display to
+    /// update the current image.
+    ///
+    /// Tearing *cannot* be observed.
+    ///
+    /// An internal queue is used to hold pending presentation requests. New requests are
+    /// appended to the end of the queue, and one request is removed from the beginning of the
+    /// queue and processed during each vertical blanking period in which the queue is
+    /// non-empty.
+    Fifo = vk::PresentModeKHR::FIFO.as_raw() as _,
+
+    /// The presentation engine generally behaves like [`FIFO`](Self::FIFO), except when the
+    /// queue becomes empty *before* the next vertical blanking period. In that case, the
+    /// presentation engine will immediately update the current image without waiting.
+    ///
+    /// This *may* result in visible tearing in that case.
+    ///
+    /// New requests are appended to the end of the queue, and one is request is removed from
+    /// the beginning of the queue and processed during each vertical blanking period in which
+    /// the queue is non-empty.
+    FifoRelaxed = vk::PresentModeKHR::FIFO_RELAXED.as_raw() as _,
+}
+
+bitflags! {
+    /// A set of [`PresentMode`]s.
+    #[derive(Debug, Clone, Copy)]
+    pub struct PresentModes: u32 {
+        /// See [`PresentMode::Immediate`].
+        const IMMEDIATE = 1 << PresentMode::Immediate as u32;
+        /// See [`PresentMode::Mailbox`].
+        const MAILBOX = 1 << PresentMode::Mailbox as u32;
+        /// See [`PresentMode::Fifo`].
+        const FIFO = 1 << PresentMode::Fifo as u32;
+        /// See [`PresentMode::FifoRelaxed`].
+        const FIFO_RELAXED = 1 << PresentMode::FifoRelaxed as u32;
+    }
+}
+
+impl From<PresentMode> for PresentModes {
+    #[inline]
+    fn from(value: PresentMode) -> Self {
+        Self::from_bits_retain(1 << value as u32)
+    }
+}
+
+/// The surface configuration passed to [`Surface::configure`] when re-configuring the surface
+/// for a new swapchain.
+#[derive(Debug, Clone)]
+pub struct SurfaceConfig {
+    /// The width of the surface.
+    pub width: u32,
+    /// The height of the surface.
+    pub height: u32,
+    /// The presentation mode used by presentation engine.
+    pub present_mode: PresentMode,
+}
+
+/// Stores information about the capabilities of the surface.
+///
+/// This information may be used to ensure that the configuration sent to the surface using
+/// [`SurfaceConfig`] and [`Surface::configure`] are valid.
+#[derive(Debug, Clone)]
+pub struct SurfaceCapabilities {
+    /// Returns the maximum size of the surface.
+    pub max_size: Option<(u32, u32)>,
+    /// Returns the minimum size of the surface, if any.
+    pub min_size: (u32, u32),
+    /// Returns the present modes supported by the surface.
+    pub present_modes: PresentModes,
+}
+
+impl SurfaceCapabilities {
+    /// Returns whether the provided size is valid for the surface.
+    pub fn is_size_valid(&self, width: u32, height: u32) -> bool {
+        if width < self.min_size.0 || height < self.min_size.1 {
+            return false;
+        }
+
+        if let Some((max_width, max_height)) = self.max_size {
+            if width > max_width || height > max_height {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Returns whether the provided present mode is supported by the surface.
+    #[inline(always)]
+    pub fn is_present_mode_valid(&self, present_mode: PresentMode) -> bool {
+        self.present_modes.contains(present_mode.into())
+    }
+
+    /// Returns whether the provided configuration is valid for the surface.
+    pub fn is_config_valid(&self, config: &SurfaceConfig) -> bool {
+        config.width > 0
+            && config.height > 0
+            && self.is_size_valid(config.width, config.height)
+            && self.is_present_mode_valid(config.present_mode)
+    }
+}
 
 /// A Vulkan renderer.
 pub struct Surface {
@@ -80,26 +198,64 @@ impl Surface {
             config: SurfaceConfig {
                 width: 0,
                 height: 0,
+                present_mode: PresentMode::Fifo,
             },
         })
     }
 
-    /// The current configuration of the surface.
-    pub fn config(&self) -> &SurfaceConfig {
-        &self.config
+    /// Returns the capabilities of the provided surface.
+    #[inline]
+    pub fn capabilities(&self) -> Result<SurfaceCapabilities, SurfaceError> {
+        let caps = get_surface_capabilities(&self.gpu, self.surface)?;
+
+        let max_size = if caps.max_image_extent.width == 0 || caps.max_image_extent.height == 0 {
+            None
+        } else {
+            Some((caps.max_image_extent.width, caps.max_image_extent.height))
+        };
+
+        let min_size = (caps.min_image_extent.width, caps.min_image_extent.height);
+
+        Ok(SurfaceCapabilities {
+            max_size,
+            min_size,
+            present_modes: self.info.present_modes,
+        })
     }
 
-    /// Configures the surface with the provided configuration.
+    /// Re-configures the surface. This function must be called every time the surface is resized.
+    pub fn configure(&mut self, config: SurfaceConfig) -> Result<(), SurfaceError> {
+        let caps = self.capabilities()?;
+        if !caps.is_config_valid(&config) {
+            return Err(SurfaceError::InvalidConfig);
+        }
+
+        unsafe { self.configure_unchecked(config) }
+    }
+
+    /// Re-configures the surface. This function must be called every time the surface is resized.
     ///
-    /// # Note
+    /// More information can be found in [`Surface::configure`].
     ///
-    /// When this function fails, the surface is left in an unusable state. Specifically, it is
-    /// no longer possible to render to the surface and it has to be configured again.
-    pub fn configure(&mut self, config: SurfaceConfig) -> Result<(), SurfaceConfigureError> {
+    /// # Safety
+    ///
+    /// The provided configuration must be compatible with the surface.
+    ///
+    /// Specifically:
+    ///
+    /// - The `width` and `height` must be greater than zero, and must be within the bounds allowed
+    ///   by the surface.
+    pub unsafe fn configure_unchecked(
+        &mut self,
+        config: SurfaceConfig,
+    ) -> Result<(), SurfaceError> {
         let old_swapchain = std::mem::replace(&mut self.swapchain, vk::SwapchainKHR::null());
 
-        self.swapchain =
+        let new_swapchain =
             create_swapchain(&self.gpu, &self.info, &config, self.surface, old_swapchain)?;
+
+        self.swapchain = new_swapchain;
+        self.config = config;
 
         Ok(())
     }
@@ -107,8 +263,14 @@ impl Surface {
 
 impl fmt::Debug for Surface {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Surface")
-            .field("config", &self.config)
+        let mut f = f.debug_struct("Surface");
+
+        if let Ok(caps) = self.capabilities() {
+            f.field("capabilities", &caps);
+        }
+
+        f.field("config", &self.config)
+            .field("swapchain", &(self.swapchain != vk::SwapchainKHR::null()))
             .finish_non_exhaustive()
     }
 }
@@ -136,7 +298,7 @@ fn create_swapchain(
     config: &SurfaceConfig,
     surface: vk::SurfaceKHR,
     old_swapchain: vk::SwapchainKHR,
-) -> Result<vk::SwapchainKHR, SurfaceConfigureError> {
+) -> Result<vk::SwapchainKHR, SurfaceError> {
     let info = vk::SwapchainCreateInfoKHR {
         clipped: vk::TRUE,
         composite_alpha: info.composite_alpha,
@@ -151,7 +313,7 @@ fn create_swapchain(
         image_usage: vk::ImageUsageFlags::COLOR_ATTACHMENT,
         min_image_count: info.min_image_count,
         pre_transform: info.pre_transform,
-        present_mode: info.present_mode,
+        present_mode: vk::PresentModeKHR::from_raw(config.present_mode as i32),
         surface,
         old_swapchain,
         ..Default::default()
@@ -160,6 +322,25 @@ fn create_swapchain(
     unsafe {
         gpu.vk_fns()
             .create_swapchain(gpu.vk_device(), &info)
-            .map_err(|_| SurfaceConfigureError)
+            .map_err(vk_to_surface_err)
+    }
+}
+
+/// Returns an instance of
+fn get_surface_capabilities(
+    gpu: &Gpu,
+    surface: vk::SurfaceKHR,
+) -> Result<vk::SurfaceCapabilitiesKHR, SurfaceError> {
+    unsafe {
+        gpu.vk_fns()
+            .get_physical_device_surface_capabilities(gpu.vk_physical_device(), surface)
+            .map_err(vk_to_surface_err)
+    }
+}
+
+fn vk_to_surface_err(err: vk::Result) -> SurfaceError {
+    match err {
+        vk::Result::ERROR_SURFACE_LOST_KHR => SurfaceError::SurfaceLost,
+        _ => SurfaceError::UnexpectedVulkanBehavior,
     }
 }

@@ -1,12 +1,11 @@
 use ash::vk;
 
+use super::{PresentModes, SurfaceError};
 use crate::gpu::Gpu;
-
-use super::SurfaceError;
 
 /// Stores information about the swapchain.
 ///
-/// Those information are static and won't change during the lifetime of the renderer.
+/// This information is queryed once and is used when creating or re-creating the swapchain.
 pub struct SwapchainInfo {
     /// The minimum number of images that the swapchain must have.
     pub min_image_count: u32,
@@ -19,7 +18,7 @@ pub struct SwapchainInfo {
     /// The color space of the swapchain images.
     pub color_space: vk::ColorSpaceKHR,
     /// The present mode that should be used for the swapchain.
-    pub present_mode: vk::PresentModeKHR,
+    pub present_modes: PresentModes,
 }
 
 /// Queries an instance of [`SwapchainInfo`].
@@ -31,7 +30,7 @@ pub fn query(gpu: &Gpu, surface: vk::SurfaceKHR) -> Result<SwapchainInfo, Surfac
     let composite_alpha = get_composite_alpha(&caps)?;
     let pre_transform = get_pre_transform(&caps);
     let surface_format = get_surface_format(gpu, surface)?;
-    let present_mode = get_present_mode(gpu, surface)?;
+    let present_modes = get_present_modes(gpu, surface)?;
 
     Ok(SwapchainInfo {
         min_image_count,
@@ -39,7 +38,7 @@ pub fn query(gpu: &Gpu, surface: vk::SurfaceKHR) -> Result<SwapchainInfo, Surfac
         pre_transform,
         format: surface_format.format,
         color_space: surface_format.color_space,
-        present_mode,
+        present_modes,
     })
 }
 
@@ -149,12 +148,9 @@ fn get_surface_format(
 }
 
 /// Returns the prefered present mode for the swapchain.
-fn get_present_mode(
-    gpu: &Gpu,
-    surface: vk::SurfaceKHR,
-) -> Result<vk::PresentModeKHR, SurfaceError> {
+fn get_present_modes(gpu: &Gpu, surface: vk::SurfaceKHR) -> Result<PresentModes, SurfaceError> {
+    let mut modes = Vec::new();
     unsafe {
-        let mut modes = Vec::new();
         gpu.vk_fns()
             .get_physical_device_surface_present_modes(
                 gpu.vk_physical_device(),
@@ -162,13 +158,18 @@ fn get_present_mode(
                 &mut modes,
             )
             .map_err(|_| SurfaceError::UnexpectedVulkanBehavior)?;
-
-        if modes.contains(&vk::PresentModeKHR::FIFO_RELAXED) {
-            Ok(vk::PresentModeKHR::FIFO_RELAXED)
-        } else if modes.contains(&vk::PresentModeKHR::FIFO) {
-            Ok(vk::PresentModeKHR::FIFO)
-        } else {
-            Err(SurfaceError::NotSupported)
-        }
     }
+
+    let ret = modes
+        .into_iter()
+        .filter_map(|mode| match mode {
+            vk::PresentModeKHR::IMMEDIATE => Some(PresentModes::IMMEDIATE),
+            vk::PresentModeKHR::MAILBOX => Some(PresentModes::MAILBOX),
+            vk::PresentModeKHR::FIFO => Some(PresentModes::FIFO),
+            vk::PresentModeKHR::FIFO_RELAXED => Some(PresentModes::FIFO_RELAXED),
+            _ => None,
+        })
+        .collect();
+
+    Ok(ret)
 }
