@@ -62,7 +62,7 @@ pub enum PresentMode {
     /// non-empty.
     Fifo = vk::PresentModeKHR::FIFO.as_raw() as _,
 
-    /// The presentation engine generally behaves like [`FIFO`](Self::FIFO), except when the
+    /// The presentation engine generally behaves like [`Fifo`](Self::Fifo), except when the
     /// queue becomes empty *before* the next vertical blanking period. In that case, the
     /// presentation engine will immediately update the current image without waiting.
     ///
@@ -203,8 +203,30 @@ impl Surface {
         })
     }
 
+    /// Returns whether the underlying swapchain is valid.
+    ///
+    /// If this function returns `true`, the swapchain is currently valid and can be used
+    /// to render to the surface.
+    ///
+    /// If this function returns `false`, the swapchain is retired and the surface cannot be
+    /// rendered to anymore.
+    ///
+    /// More information in the documentation of [`Surface::configure`].
+    #[inline(always)]
+    pub fn is_swapchain_valid(&self) -> bool {
+        self.swapchain != vk::SwapchainKHR::null()
+    }
+
     /// Returns the capabilities of the provided surface.
-    #[inline]
+    ///
+    /// # Notes
+    ///
+    /// Most of the fields of the returned [`SurfaceCapabilities`] instance are guaranteed to
+    /// remain constant for the lifetime of the surface.
+    ///
+    /// However, some may change when the underlying surface target changes.
+    ///
+    /// - `min_size` and `max_size` may change when the surface is resized.
     pub fn capabilities(&self) -> Result<SurfaceCapabilities, SurfaceError> {
         let caps = get_surface_capabilities(&self.gpu, self.surface)?;
 
@@ -224,9 +246,22 @@ impl Surface {
     }
 
     /// Re-configures the surface. This function must be called every time the surface is resized.
+    ///
+    /// # Swapchain Retirement
+    ///
+    /// In some cases, the swapchain managed by this [`Surface`] instance may fail to be recreated
+    /// by this function. In that case, it is destroyed and cannot be used anymore. When that
+    /// happens, it is no longer possible to render to the surface and the swapchain has to be
+    /// created again.
+    ///
+    /// You can check whether the swapchain is currently retired by calling
+    /// the [`Surface::is_swapchain_valid`] function.
+    ///
+    /// Hopefully, it's only an edge case that developers should not have to worry too much about.
+    /// Specifically, it is probably legitimate to simply `panic!` if surface cannot be
+    /// re-configured for some reason.
     pub fn configure(&mut self, config: SurfaceConfig) -> Result<(), SurfaceError> {
-        let caps = self.capabilities()?;
-        if !caps.is_config_valid(&config) {
+        if !self.capabilities()?.is_config_valid(&config) {
             return Err(SurfaceError::InvalidConfig);
         }
 
@@ -245,6 +280,10 @@ impl Surface {
     ///
     /// - The `width` and `height` must be greater than zero, and must be within the bounds allowed
     ///   by the surface.
+    ///
+    /// - The `present_mode` must be supported by the surface.
+    ///
+    /// You can check the capabilities of the surface by calling [`Surface::capabilities`].
     pub unsafe fn configure_unchecked(
         &mut self,
         config: SurfaceConfig,
