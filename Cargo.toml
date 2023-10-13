@@ -1,0 +1,12 @@
+[package]
+name = "warm"
+version = "0.1.0"
+edition = "2021"
+description = "A lightweight rendering framework built on top of Vulkan"
+authors = ["Nils Mathieu <nils.mathiue.contact@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+
+[dependencies]
+ash = "0.37"
+libloading = "0.8"
