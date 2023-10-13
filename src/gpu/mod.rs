@@ -14,9 +14,10 @@ use bitflags::bitflags;
 use crate::utility::ScopeGuard;
 
 mod device;
+mod instance;
 
 use self::device::DeviceQuery;
-use self::fns::Fns;
+use self::instance::InstanceResult;
 
 mod config;
 mod error;
@@ -140,7 +141,10 @@ impl Gpu {
         let mut fns = Fns::default();
         fns._load_static_fns(&library);
 
-        let instance = create_instance(&fns)?;
+        let InstanceResult {
+            instance,
+            extensions: instance_extensions,
+        } = self::instance::create(&fns)?;
         fns._load_instance_fns(instance);
         let drop_instance = fns.instance_v1_0.destroy_instance;
         let instance = ScopeGuard::new(instance, move |i| unsafe { drop_instance(i, null_mut()) });
@@ -163,7 +167,7 @@ impl Gpu {
             queue,
             fns,
             info,
-            extensions: device_info.extension_flags,
+            extensions: device_info.extension_flags | instance_extensions,
         }))
     }
 
@@ -235,7 +239,7 @@ impl fmt::Debug for Gpu {
         f.debug_struct("Gpu")
             .field("info", &self.info)
             .field("extensions", &self.extensions)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -260,82 +264,6 @@ fn load_vulkan_library() -> Result<libloading::Library, GpuError> {
     match ret {
         Ok(library) => Ok(library),
         Err(_) => Err(GpuError::CantLoadVulkan),
-    }
-}
-
-/// Returns the name of the project, with a null terminator.
-fn get_crate_name() -> &'static str {
-    concat!(env!("CARGO_PKG_NAME"), "\0")
-}
-
-/// Returns the version of the crate.
-fn get_crate_version() -> u32 {
-    let patch = env!("CARGO_PKG_VERSION_PATCH").parse::<u32>().unwrap();
-    let minor = env!("CARGO_PKG_VERSION_MINOR").parse::<u32>().unwrap();
-    let major = env!("CARGO_PKG_VERSION_MAJOR").parse::<u32>().unwrap();
-
-    vk::make_api_version(0, major, minor, patch)
-}
-
-/// Returns the list of instance extensions to enable.
-///
-/// This function will attempt to enable as much extensions as possible on the current platform
-/// that are required for the engine to work.
-fn get_instance_extensions(fns: &Fns) -> Result<Vec<*const i8>, GpuError> {
-    use ash::extensions::khr;
-
-    const REQUIRED_EXTENSIONS: &[&CStr] = &[khr::Surface::name()];
-    const WANTED_EXTENSIONS: &[&CStr] = &[khr::Win32Surface::name(), khr::XlibSurface::name()];
-
-    let mut available = Vec::new();
-    unsafe {
-        match fns.enumerate_instance_extension_properties(&mut available) {
-            Ok(()) => (),
-            Err(vk::Result::ERROR_EXTENSION_NOT_PRESENT) => return Err(GpuError::Unsupported),
-            Err(_) => return Err(GpuError::UnexpectedVulkanBehavior),
-        }
-    }
-
-    // Returns whether the provided extension is part of the list of available extensions.
-    let has_extension = move |name: &CStr| unsafe {
-        available
-            .iter()
-            .any(move |extension| CStr::from_ptr(extension.extension_name.as_ptr()) == name)
-    };
-
-    let mut extensions = Vec::new();
-    extensions.extend(REQUIRED_EXTENSIONS.iter().map(|name| name.as_ptr()));
-
-    for ext in WANTED_EXTENSIONS {
-        if has_extension(ext) {
-            extensions.push(ext.as_ptr());
-        }
-    }
-
-    Ok(extensions)
-}
-
-/// Creates a Vulkan instance.
-fn create_instance(fns: &Fns) -> Result<vk::Instance, GpuError> {
-    let extensions = get_instance_extensions(fns)?;
-
-    let app_info = vk::ApplicationInfo {
-        api_version: vk::HEADER_VERSION_COMPLETE,
-        p_engine_name: get_crate_name().as_ptr() as *const c_char,
-        engine_version: get_crate_version(),
-        ..Default::default()
-    };
-
-    let create_info = vk::InstanceCreateInfo {
-        p_application_info: &app_info,
-        pp_enabled_extension_names: extensions.as_ptr(),
-        enabled_extension_count: extensions.len() as u32,
-        ..Default::default()
-    };
-
-    unsafe {
-        fns.create_instance(&create_info)
-            .map_err(|_| GpuError::UnexpectedVulkanBehavior)
     }
 }
 

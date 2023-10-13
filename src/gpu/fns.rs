@@ -1,6 +1,6 @@
 //! Defines [`Fns`].
 
-#![allow(unsafe_op_in_unsafe_fn)]
+#![allow(unsafe_op_in_unsafe_fn, missing_docs, clippy::missing_safety_doc)]
 
 use std::ffi::{c_void, CStr};
 use std::fmt;

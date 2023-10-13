@@ -72,7 +72,7 @@ fn sanitize_assumed_capabilities(caps: &vk::SurfaceCapabilitiesKHR) -> Result<()
         return Err(SurfaceError::NotSupported);
     }
 
-    if caps
+    if !caps
         .supported_usage_flags
         .contains(vk::ImageUsageFlags::COLOR_ATTACHMENT)
     {

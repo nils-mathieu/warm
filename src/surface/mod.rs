@@ -107,22 +107,24 @@ impl Surface {
 
 impl fmt::Debug for Surface {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Surface").field("gpu", &*self.gpu).finish()
+        f.debug_struct("Surface")
+            .field("config", &self.config)
+            .finish_non_exhaustive()
     }
 }
 
 impl Drop for Surface {
     fn drop(&mut self) {
         unsafe {
-            self.gpu
-                .vk_fns()
-                .destroy_surface(self.gpu.vk_instance(), self.surface);
-
             if self.swapchain != vk::SwapchainKHR::null() {
                 self.gpu
                     .vk_fns()
                     .destroy_swapchain(self.gpu.vk_device(), self.swapchain);
             }
+
+            self.gpu
+                .vk_fns()
+                .destroy_surface(self.gpu.vk_instance(), self.surface);
         }
     }
 }
