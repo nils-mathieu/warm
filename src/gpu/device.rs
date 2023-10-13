@@ -5,7 +5,7 @@ use std::ffi::{c_char, CStr};
 use ash::vk;
 
 use super::fns::Fns;
-use super::{GpuConfig, GpuError};
+use super::{Extensions, GpuConfig, GpuError};
 
 /// Stores information about a physical device that has been picked.
 pub struct DeviceQuery {
@@ -15,6 +15,8 @@ pub struct DeviceQuery {
     pub queue_family: u32,
     /// A list of extensions to enable for the logical device.
     pub extensions: Box<[*const c_char]>,
+    /// The extensions that should be enabled for the logical device.
+    pub extension_flags: Extensions,
     /// A list of features to enable for the logical device.
     pub features: Box<vk::PhysicalDeviceFeatures>,
 }
@@ -66,7 +68,7 @@ struct QueryContext<'a> {
 ///
 /// If the physical device is not suitable for use with this application, returns `None`.
 fn query_device(ctx: &QueryContext) -> Option<DeviceQuery> {
-    let extensions = get_extensions(ctx)?;
+    let (extensions, extension_flags) = get_extensions(ctx)?;
     let features = get_features(ctx)?;
     let queue_family = get_queue_family(ctx)?;
 
@@ -74,6 +76,7 @@ fn query_device(ctx: &QueryContext) -> Option<DeviceQuery> {
         physical_device: ctx.physical_device,
         queue_family,
         extensions,
+        extension_flags,
         features,
     })
 }
@@ -91,14 +94,20 @@ fn get_queue_family(ctx: &QueryContext) -> Option<u32> {
 
     families
         .iter()
-        .position(|family| family.queue_flags.contains(vk::QueueFlags::GRAPHICS))
+        .position(|family| {
+            family
+                .queue_flags
+                .contains(vk::QueueFlags::GRAPHICS | vk::QueueFlags::TRANSFER)
+        })
         .map(|index| index as u32)
 }
 
 /// Returns the list of extensions that should be enabled for the logical device.
 ///
 /// If some extensions are missing, [`None`] is returned.
-fn get_extensions(ctx: &QueryContext) -> Option<Box<[*const i8]>> {
+fn get_extensions(ctx: &QueryContext) -> Option<(Box<[*const i8]>, Extensions)> {
+    use ash::extensions::khr::*;
+
     let mut available = Vec::new();
     unsafe {
         ctx.fns
@@ -113,20 +122,24 @@ fn get_extensions(ctx: &QueryContext) -> Option<Box<[*const i8]>> {
             .any(|ext| CStr::from_ptr(ext.extension_name.as_ptr()) == name)
     };
 
-    const REQUIRED_EXTENSIONS: &[&CStr] = &[ash::extensions::khr::Swapchain::name()];
+    const REQUIRED_EXTENSIONS: &[(&CStr, Extensions)] =
+        &[(Swapchain::name(), Extensions::SWAPCHAIN)];
 
-    for ext in REQUIRED_EXTENSIONS {
+    let mut extensions = Vec::new();
+    let mut flags = Extensions::empty();
+
+    for (ext, flag) in REQUIRED_EXTENSIONS {
         if !is_available(ext) {
             return None;
         }
-    }
 
-    let mut extensions = Vec::new();
-    extensions.extend(REQUIRED_EXTENSIONS.iter().map(|name| name.as_ptr()));
+        extensions.push(ext.as_ptr());
+        flags |= *flag;
+    }
 
     // If we have optional extensions later, we can add them here easily.
 
-    Some(extensions.into_boxed_slice())
+    Some((extensions.into_boxed_slice(), flags))
 }
 
 /// Returns the list of features that should be enabled for the logical device.

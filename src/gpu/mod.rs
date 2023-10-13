@@ -9,20 +9,22 @@ use std::ptr::null_mut;
 use std::sync::Arc;
 
 use ash::vk;
+use bitflags::bitflags;
 
 use crate::utility::ScopeGuard;
 
 mod device;
-mod fns;
 
 use self::device::DeviceQuery;
 use self::fns::Fns;
 
 mod config;
 mod error;
+mod fns;
 
 pub use self::config::*;
 pub use self::error::*;
+pub use self::fns::*;
 
 /// The type of a graphics processing unit (GPU).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -80,6 +82,23 @@ impl fmt::Debug for GpuInfo {
     }
 }
 
+bitflags! {
+    /// A set of flags that store the extensions that have been enabled on the logical device and
+    /// instance managed by a [`Gpu`] instance.
+    #[derive(Debug, Clone, Copy)]
+    pub struct Extensions: u32 {
+        /// `VK_KHR_surface` (instance)
+        const SURFACE = 1 << 0;
+        /// `VK_KHR_win32_surface` (instance)
+        const WIN32_SURFACE = 1 << 1;
+        /// `VK_KHR_xlib_surface` (instance)
+        const XLIB_SURFACE = 1 << 2;
+
+        /// `VK_KHR_swapchain` (device)
+        const SWAPCHAIN = 1 << 16;
+    }
+}
+
 /// An open connection with a graphics processing unit (GPU).
 ///
 /// This type represents an open connection with a GPU. It is used to submit commands to the GPU,
@@ -93,6 +112,9 @@ pub struct Gpu {
 
     /// The handle to the Vulkan instance.
     instance: vk::Instance,
+
+    /// The physical device that has been selected for use.
+    physical_device: vk::PhysicalDevice,
     /// The handle to the Vulkan device.
     device: vk::Device,
     /// The index of the queue family that `queue` is part of.
@@ -105,6 +127,8 @@ pub struct Gpu {
 
     /// Some information about the GPU.
     info: GpuInfo,
+    /// The extensions that have been enabled on the logical device.
+    extensions: Extensions,
 }
 
 impl Gpu {
@@ -133,11 +157,13 @@ impl Gpu {
         Ok(Arc::new(Self {
             library: ManuallyDrop::new(library),
             instance: ScopeGuard::defuse(instance),
+            physical_device: device_info.physical_device,
             device: ScopeGuard::defuse(device),
             queue_family: device_info.queue_family,
             queue,
             fns,
             info,
+            extensions: device_info.extension_flags,
         }))
     }
 
@@ -145,6 +171,52 @@ impl Gpu {
     #[inline(always)]
     pub fn info(&self) -> &GpuInfo {
         &self.info
+    }
+
+    /// Returns the list of extensions that have been enabled on the logical device and instance.
+    #[inline(always)]
+    pub fn extensions(&self) -> Extensions {
+        self.extensions
+    }
+
+    /// Returns the list of functions that have been loaded for the instance and device
+    /// respectively.
+    #[inline(always)]
+    pub fn vk_fns(&self) -> &Fns {
+        &self.fns
+    }
+
+    /// Returns the physical device handle that's associated with this [`Gpu`] instance.
+    #[inline(always)]
+    pub fn vk_physical_device(&self) -> vk::PhysicalDevice {
+        self.physical_device
+    }
+
+    /// Returns the logical device handle that's associated with this [`Gpu`] instance.
+    #[inline(always)]
+    pub fn vk_device(&self) -> vk::Device {
+        self.device
+    }
+
+    /// Returns the Vulkan instance that has been created by this [`Gpu`] instance.
+    #[inline(always)]
+    pub fn vk_instance(&self) -> vk::Instance {
+        self.instance
+    }
+
+    /// Returns the index of the queue family that the queue returned by [`vk_queue`](Gpu::vk_queue)
+    /// is part of.
+    #[inline(always)]
+    pub fn vk_queue_family(&self) -> u32 {
+        self.queue_family
+    }
+
+    /// Returns the queue that has been opened by this [`Gpu`] instance.
+    ///
+    /// This queue is known to support graphics and transfer operations.
+    #[inline(always)]
+    pub fn vk_queue(&self) -> vk::Queue {
+        self.queue
     }
 }
 
@@ -160,7 +232,10 @@ impl Drop for Gpu {
 
 impl fmt::Debug for Gpu {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("Gpu").field(&self.info).finish()
+        f.debug_struct("Gpu")
+            .field("info", &self.info)
+            .field("extensions", &self.extensions)
+            .finish()
     }
 }
 
@@ -214,8 +289,11 @@ fn get_instance_extensions(fns: &Fns) -> Result<Vec<*const i8>, GpuError> {
 
     let mut available = Vec::new();
     unsafe {
-        fns.enumerate_instance_extension_properties(&mut available)
-            .map_err(vk_to_gpu_error)?;
+        match fns.enumerate_instance_extension_properties(&mut available) {
+            Ok(()) => (),
+            Err(vk::Result::ERROR_EXTENSION_NOT_PRESENT) => return Err(GpuError::Unsupported),
+            Err(_) => return Err(GpuError::UnexpectedVulkanBehavior),
+        }
     }
 
     // Returns whether the provided extension is part of the list of available extensions.
@@ -255,7 +333,10 @@ fn create_instance(fns: &Fns) -> Result<vk::Instance, GpuError> {
         ..Default::default()
     };
 
-    unsafe { fns.create_instance(&create_info).map_err(vk_to_gpu_error) }
+    unsafe {
+        fns.create_instance(&create_info)
+            .map_err(|_| GpuError::UnexpectedVulkanBehavior)
+    }
 }
 
 /// Opens a connection with the specified physical device.
@@ -280,7 +361,7 @@ fn create_device(device_info: &DeviceQuery, fns: &Fns) -> Result<vk::Device, Gpu
 
     unsafe {
         fns.create_device(device_info.physical_device, &create_info)
-            .map_err(vk_to_gpu_error)
+            .map_err(|_| GpuError::UnexpectedVulkanBehavior)
     }
 }
 
@@ -311,10 +392,4 @@ fn get_gpu_info(physical_device: vk::PhysicalDevice, fns: &Fns) -> Result<GpuInf
         vendor_id: props.vendor_id,
         device_uuid: props.pipeline_cache_uuid,
     })
-}
-
-/// Converts a Vulkan result to a [`GpuError`].
-#[inline]
-fn vk_to_gpu_error(_result: vk::Result) -> GpuError {
-    GpuError::UnexpectedVulkanBehavior
 }

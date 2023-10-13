@@ -10,3 +10,5 @@ readme = "README.md"
 [dependencies]
 ash = "0.37"
 libloading = "0.8"
+raw-window-handle = "0.6"
+bitflags = "2"

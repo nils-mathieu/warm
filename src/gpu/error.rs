@@ -11,6 +11,8 @@ pub enum GpuError {
     UnexpectedVulkanBehavior,
     /// No suitable GPU was found on the system.
     NoSuitableGpu,
+    /// The Vulkan implementation does not support the features required by the crate.
+    Unsupported,
 }
 
 impl fmt::Display for GpuError {
@@ -20,6 +22,7 @@ impl fmt::Display for GpuError {
             Self::CantLoadVulkan => write!(f, "could not load Vulkan dynamic library"),
             Self::UnexpectedVulkanBehavior => write!(f, "Vulkan implementation behaved unexpectedly"),
             Self::NoSuitableGpu => write!(f, "no suitable GPU was found on the system"),
+            Self::Unsupported => write!(f, "the Vulkan implementation is missing features"),
         }
     }
 }
