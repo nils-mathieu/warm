@@ -4,7 +4,7 @@ use std::fmt;
 
 /// An error that might occur when creating or interacting with a [`Surface`](super::Surface).
 #[derive(Debug, Clone)]
-pub enum SurfaceError {
+pub enum SurfaceError<C = std::convert::Infallible> {
     /// Vulkan behaved in an unexpected way.
     UnexpectedVulkanBehavior,
     /// The GPU does not support the provided surface.
@@ -13,9 +13,25 @@ pub enum SurfaceError {
     Lost,
     /// The configuration provided is incompatible with the surface.
     InvalidConfig,
+    /// The [`SurfaceContents`](super::SurfaceContents) implementation failed.
+    Contents(C),
 }
 
-impl fmt::Display for SurfaceError {
+impl SurfaceError {
+    /// Casts this [`SurfaceError`] to another [`SurfaceError<C>`] with any type parameter
+    /// `C`.
+    pub fn cast_contents<C>(self) -> SurfaceError<C> {
+        match self {
+            Self::UnexpectedVulkanBehavior => SurfaceError::UnexpectedVulkanBehavior,
+            Self::NotSupported => SurfaceError::NotSupported,
+            Self::Lost => SurfaceError::Lost,
+            Self::InvalidConfig => SurfaceError::InvalidConfig,
+            Self::Contents(never) => match never {},
+        }
+    }
+}
+
+impl<C: fmt::Display> fmt::Display for SurfaceError<C> {
     #[rustfmt::skip]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
@@ -23,11 +39,19 @@ impl fmt::Display for SurfaceError {
             Self::NotSupported => write!(f, "the GPU does the support the surface"),
             Self::Lost => write!(f, "the surface has been lost"),
             Self::InvalidConfig => write!(f, "the configuration provided is incompatible with the surface"),
+            Self::Contents(ref contents) => fmt::Display::fmt(contents, f),
         }
     }
 }
 
-impl std::error::Error for SurfaceError {}
+impl<C: std::error::Error> std::error::Error for SurfaceError<C> {
+    fn cause(&self) -> Option<&dyn std::error::Error> {
+        match *self {
+            Self::Contents(ref contents) => Some(contents),
+            _ => None,
+        }
+    }
+}
 
 /// An error that might occur when presenting an image to the surface.
 #[derive(Debug, Clone)]
