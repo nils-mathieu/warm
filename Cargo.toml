@@ -7,8 +7,6 @@ authors = ["Nils Mathieu <nils.mathiue.contact@gmail.com>"]
 license = "MIT"
 readme = "README.md"
 
-[dependencies]
-ash = { version = "0.37", default-features = false }
-libloading = "0.8"
-raw-window-handle = "0.6"
-bitflags = "2"
+[workspace]
+members = ["crates/*"]
+resolver = "2"
