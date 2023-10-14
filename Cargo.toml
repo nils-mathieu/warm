@@ -2,7 +2,7 @@
 name = "warm"
 version = "0.1.0"
 edition = "2021"
-description = "A lightweight rendering framework built on top of Vulkan"
+description = "An experimental rendering framework built on top of Vulkan."
 authors = ["Nils Mathieu <nils.mathiue.contact@gmail.com>"]
 license = "MIT"
 readme = "README.md"
@@ -10,3 +10,6 @@ readme = "README.md"
 [workspace]
 members = ["crates/*"]
 resolver = "2"
+
+[dependencies]
+warm-core = { path = "crates/core" }

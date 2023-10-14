@@ -1,3 +1,3 @@
 # Warm
 
-`warm` is a lightweight rendering framework built on top of Vulkan.
+`warm` is an experimental rendering framework built on top of Vulkan.
