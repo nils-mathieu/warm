@@ -333,6 +333,13 @@ impl Fns {
     // DEVICE FUNCTIONS
     //
 
+    pub unsafe fn device_wait_idle(&self, device: vk::Device) -> VkResult<()> {
+        match (self.device_v1_0.device_wait_idle)(device) {
+            vk::Result::SUCCESS => Ok(()),
+            err => Err(err),
+        }
+    }
+
     pub unsafe fn get_device_queue(
         &self,
         device: vk::Device,
@@ -346,6 +353,194 @@ impl Fns {
 
     pub unsafe fn destroy_device(&self, device: vk::Device) {
         (self.device_v1_0.destroy_device)(device, null());
+    }
+
+    pub unsafe fn create_semaphore(
+        &self,
+        device: vk::Device,
+        info: &vk::SemaphoreCreateInfo,
+    ) -> VkResult<vk::Semaphore> {
+        let mut semaphore = MaybeUninit::uninit();
+        let ret = (self.device_v1_0.create_semaphore)(device, info, null(), semaphore.as_mut_ptr());
+
+        match ret {
+            vk::Result::SUCCESS => Ok(semaphore.assume_init()),
+            err => Err(err),
+        }
+    }
+
+    pub unsafe fn destroy_semaphore(&self, device: vk::Device, semaphore: vk::Semaphore) {
+        (self.device_v1_0.destroy_semaphore)(device, semaphore, null());
+    }
+
+    pub unsafe fn create_fence(
+        &self,
+        device: vk::Device,
+        info: &vk::FenceCreateInfo,
+    ) -> VkResult<vk::Fence> {
+        let mut fence = MaybeUninit::uninit();
+        let ret = (self.device_v1_0.create_fence)(device, info, null(), fence.as_mut_ptr());
+
+        match ret {
+            vk::Result::SUCCESS => Ok(fence.assume_init()),
+            err => Err(err),
+        }
+    }
+
+    pub unsafe fn destroy_fence(&self, device: vk::Device, fence: vk::Fence) {
+        (self.device_v1_0.destroy_fence)(device, fence, null());
+    }
+
+    pub unsafe fn create_command_pool(
+        &self,
+        device: vk::Device,
+        info: &vk::CommandPoolCreateInfo,
+    ) -> VkResult<vk::CommandPool> {
+        let mut command_pool = MaybeUninit::uninit();
+        let ret =
+            (self.device_v1_0.create_command_pool)(device, info, null(), command_pool.as_mut_ptr());
+
+        match ret {
+            vk::Result::SUCCESS => Ok(command_pool.assume_init()),
+            err => Err(err),
+        }
+    }
+
+    pub unsafe fn destroy_command_pool(&self, device: vk::Device, command_pool: vk::CommandPool) {
+        (self.device_v1_0.destroy_command_pool)(device, command_pool, null());
+    }
+
+    pub unsafe fn allocate_command_buffers(
+        &self,
+        device: vk::Device,
+        info: &vk::CommandBufferAllocateInfo,
+        output: *mut vk::CommandBuffer,
+    ) -> VkResult<()> {
+        match (self.device_v1_0.allocate_command_buffers)(device, info, output) {
+            vk::Result::SUCCESS => Ok(()),
+            err => Err(err),
+        }
+    }
+
+    pub unsafe fn free_command_buffer(
+        &self,
+        device: vk::Device,
+        command_pool: vk::CommandPool,
+        buffers: &[vk::CommandBuffer],
+    ) {
+        (self.device_v1_0.free_command_buffers)(
+            device,
+            command_pool,
+            buffers.len() as u32,
+            buffers.as_ptr(),
+        );
+    }
+
+    pub unsafe fn wait_for_fences(
+        &self,
+        device: vk::Device,
+        fences: &[vk::Fence],
+        wait_all: bool,
+        timeout: u64,
+    ) -> VkResult<()> {
+        match (self.device_v1_0.wait_for_fences)(
+            device,
+            fences.len() as u32,
+            fences.as_ptr(),
+            wait_all as u32,
+            timeout,
+        ) {
+            vk::Result::SUCCESS => Ok(()),
+            err => Err(err),
+        }
+    }
+
+    pub unsafe fn reset_fences(&self, device: vk::Device, fences: &[vk::Fence]) -> VkResult<()> {
+        match (self.device_v1_0.reset_fences)(device, fences.len() as u32, fences.as_ptr()) {
+            vk::Result::SUCCESS => Ok(()),
+            err => Err(err),
+        }
+    }
+
+    //
+    // COMMAND BUFFER FUNCTIONS
+    //
+
+    pub unsafe fn reset_command_buffer(
+        &self,
+        buffer: vk::CommandBuffer,
+        flags: vk::CommandBufferResetFlags,
+    ) -> VkResult<()> {
+        match (self.device_v1_0.reset_command_buffer)(buffer, flags) {
+            vk::Result::SUCCESS => Ok(()),
+            err => Err(err),
+        }
+    }
+
+    pub unsafe fn begin_command_buffer(
+        &self,
+        buffer: vk::CommandBuffer,
+        info: &vk::CommandBufferBeginInfo,
+    ) -> VkResult<()> {
+        match (self.device_v1_0.begin_command_buffer)(buffer, info) {
+            vk::Result::SUCCESS => Ok(()),
+            err => Err(err),
+        }
+    }
+
+    pub unsafe fn end_command_buffer(&self, buffer: vk::CommandBuffer) -> VkResult<()> {
+        match (self.device_v1_0.end_command_buffer)(buffer) {
+            vk::Result::SUCCESS => Ok(()),
+            err => Err(err),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn cmd_pipeline_barrier(
+        &self,
+        buffer: vk::CommandBuffer,
+        src_stage: vk::PipelineStageFlags,
+        dst_stage: vk::PipelineStageFlags,
+        dependencies: vk::DependencyFlags,
+        memory_barriers: &[vk::MemoryBarrier],
+        buffer_memory_barriers: &[vk::BufferMemoryBarrier],
+        image_memory_barriers: &[vk::ImageMemoryBarrier],
+    ) {
+        (self.device_v1_0.cmd_pipeline_barrier)(
+            buffer,
+            src_stage,
+            dst_stage,
+            dependencies,
+            memory_barriers.len() as u32,
+            memory_barriers.as_ptr(),
+            buffer_memory_barriers.len() as u32,
+            buffer_memory_barriers.as_ptr(),
+            image_memory_barriers.len() as u32,
+            image_memory_barriers.as_ptr(),
+        );
+    }
+
+    //
+    // QUEUE FUNCTIONS
+    //
+
+    pub unsafe fn queue_submit(
+        &self,
+        queue: vk::Queue,
+        info: &[vk::SubmitInfo],
+        fence: vk::Fence,
+    ) -> VkResult<()> {
+        match (self.device_v1_0.queue_submit)(queue, info.len() as u32, info.as_ptr(), fence) {
+            vk::Result::SUCCESS => Ok(()),
+            err => Err(err),
+        }
+    }
+
+    pub unsafe fn queue_wait_idle(&self, queue: vk::Queue) -> VkResult<()> {
+        match (self.device_v1_0.queue_wait_idle)(queue) {
+            vk::Result::SUCCESS => Ok(()),
+            err => Err(err),
+        }
     }
 
     //
@@ -369,6 +564,60 @@ impl Fns {
 
     pub unsafe fn destroy_swapchain(&self, device: vk::Device, swapchain: vk::SwapchainKHR) {
         (self.swapchain.destroy_swapchain_khr)(device, swapchain, null());
+    }
+
+    pub unsafe fn acquire_next_image(
+        &self,
+        device: vk::Device,
+        swapchain: vk::SwapchainKHR,
+        timeout: u64,
+        semaphore: vk::Semaphore,
+        fence: vk::Fence,
+    ) -> VkResult<(u32, bool)> {
+        let mut image_index = MaybeUninit::uninit();
+        let ret = (self.swapchain.acquire_next_image_khr)(
+            device,
+            swapchain,
+            timeout,
+            semaphore,
+            fence,
+            image_index.as_mut_ptr(),
+        );
+
+        match ret {
+            vk::Result::SUCCESS => Ok((image_index.assume_init(), true)),
+            vk::Result::SUBOPTIMAL_KHR => Ok((image_index.assume_init(), false)),
+            error => Err(error),
+        }
+    }
+
+    pub unsafe fn queue_present(
+        &self,
+        queue: vk::Queue,
+        info: &vk::PresentInfoKHR,
+    ) -> VkResult<()> {
+        match (self.swapchain.queue_present_khr)(queue, info) {
+            vk::Result::SUCCESS => Ok(()),
+            error => Err(error),
+        }
+    }
+
+    pub unsafe fn get_swapchain_images<C>(
+        &self,
+        device: vk::Device,
+        swapchain: vk::SwapchainKHR,
+        ret: &mut C,
+    ) -> VkResult<()>
+    where
+        C: VectorLike<Item = vk::Image>,
+    {
+        let f = self.swapchain.get_swapchain_images_khr;
+        let read = move |count, data| f(device, swapchain, count, data);
+
+        match crate::utility::read_into_vector(ret, read) {
+            vk::Result::SUCCESS => Ok(()),
+            error => Err(error),
+        }
     }
 }
 

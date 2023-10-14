@@ -12,12 +12,16 @@ use crate::gpu::Gpu;
 use crate::utility::ScopeGuard;
 
 mod error;
+mod surface_contents;
 
 pub use self::error::*;
+pub use self::surface_contents::*;
 
+mod semaphore_pool;
 mod swapchain_info;
 mod window;
 
+use self::semaphore_pool::SemaphorePool;
 use self::swapchain_info::SwapchainInfo;
 
 /// A trait for surfaces on which we can render.
@@ -172,12 +176,21 @@ pub struct Surface {
     /// the renderer will be in an unusable state. In that case, it is no longer possible
     /// to render to the surface and the swapchain has to be created again.
     swapchain: vk::SwapchainKHR,
+    /// The images that were created for the swapchain.
+    images: Vec<vk::Image>,
+    /// A pool of semaphores to use when acquiring swapchain images.
+    semaphore_pool: SemaphorePool,
 
     /// Information about the swapchain.
     info: SwapchainInfo,
-
     /// The current configuration of the surface.
     config: SurfaceConfig,
+
+    /// A list of semaphores that the present operation should wait on. Those semaphores are *not*
+    /// managed by us and must be destroyed by a [`SurfaceContents`] implementation.
+    ///
+    /// This vector is kept here to avoid having to re-allocate it every time we present a frame.
+    present_wait_semaphores: Vec<vk::Semaphore>,
 }
 
 impl Surface {
@@ -194,12 +207,16 @@ impl Surface {
             gpu,
             surface: ScopeGuard::defuse(surface),
             swapchain: vk::SwapchainKHR::null(),
+            images: Vec::new(),
+            semaphore_pool: SemaphorePool::default(),
             info,
             config: SurfaceConfig {
                 width: 0,
                 height: 0,
                 present_mode: PresentMode::Fifo,
             },
+
+            present_wait_semaphores: Vec::new(),
         })
     }
 
@@ -289,14 +306,113 @@ impl Surface {
         config: SurfaceConfig,
     ) -> Result<(), SurfaceError> {
         let old_swapchain = std::mem::replace(&mut self.swapchain, vk::SwapchainKHR::null());
+        self.images.clear();
 
-        let new_swapchain =
-            create_swapchain(&self.gpu, &self.info, &config, self.surface, old_swapchain)?;
+        let new_swapchain = unsafe {
+            create_swapchain(&self.gpu, &self.info, &config, self.surface, old_swapchain)?
+        };
+        let new_swapchain = ScopeGuard::new(new_swapchain, |s| unsafe {
+            self.gpu.vk_fns().destroy_swapchain(self.gpu.vk_device(), s)
+        });
 
-        self.swapchain = new_swapchain;
+        unsafe {
+            self.gpu
+                .vk_fns()
+                .get_swapchain_images(self.gpu.vk_device(), *new_swapchain, &mut self.images)
+                .map_err(vk_to_surface_err)?;
+        }
+
+        self.swapchain = ScopeGuard::defuse(new_swapchain);
         self.config = config;
 
         Ok(())
+    }
+
+    /// Presents a new image to the surface.
+    ///
+    /// The contents of the frame is dictated by the provided [`SurfaceContents`] implementation.
+    ///
+    /// # Safety
+    ///
+    /// The provided [`SurfaceContents`] implementation must be up-to-date. In other words, it must
+    /// be kept up-to-date with the current state of the surface and its swapchain using
+    /// [`SurfaceContents::notify_destroy_images`] and [`SurfaceContents::new_images`].
+    pub unsafe fn present<C>(&mut self, contents: &mut C) -> Result<(), PresentError<C::Error>>
+    where
+        C: SurfaceContents,
+    {
+        if !self.is_swapchain_valid() {
+            return Err(PresentError::SwapchainRetired);
+        }
+
+        unsafe {
+            let acquire_semaphore = self
+                .semaphore_pool
+                .get(&self.gpu)
+                .map_err(|_| PresentError::UnexpectedVulkanBehavior)?;
+
+            let (image_index, _suboptimal) = self
+                .gpu
+                .vk_fns()
+                .acquire_next_image(
+                    self.gpu.vk_device(),
+                    self.swapchain,
+                    u64::MAX - 1,
+                    *acquire_semaphore,
+                    vk::Fence::null(),
+                )
+                .map_err(vk_to_present_err)?;
+
+            self.present_wait_semaphores.clear();
+            let mut context = FrameContext {
+                gpu: self.gpu.clone(),
+                acquire_semaphore: *acquire_semaphore,
+                image_index,
+                wait_semaphores: &mut self.present_wait_semaphores,
+                image: *self.images.get_unchecked(image_index as usize),
+            };
+
+            contents
+                .render(&mut context)
+                .map_err(PresentError::Contents)?;
+
+            let present_info = vk::PresentInfoKHR {
+                p_image_indices: &image_index,
+                p_swapchains: &self.swapchain,
+                swapchain_count: 1,
+                p_wait_semaphores: context.wait_semaphores.as_ptr(),
+                wait_semaphore_count: context.wait_semaphores.len() as u32,
+                ..Default::default()
+            };
+
+            self.gpu
+                .vk_fns()
+                .queue_present(self.gpu.vk_queue(), &present_info)
+                .map_err(vk_to_present_err)?;
+
+            Ok(())
+        }
+    }
+
+    /// Returns the swapchain that's used by the surface.
+    ///
+    /// Note that this function might return `vk::SwapchainKHR::null()` if the swapchain is
+    /// currently retired.
+    #[inline(always)]
+    pub fn vk_swapchain(&self) -> vk::SwapchainKHR {
+        self.swapchain
+    }
+
+    /// Returns the Vulkan surface handle.
+    #[inline(always)]
+    pub fn vk_surface(&self) -> vk::SurfaceKHR {
+        self.surface
+    }
+
+    /// Returns the images that were created for the swapchain.
+    #[inline(always)]
+    pub fn vk_images(&self) -> &[vk::Image] {
+        &self.images
     }
 }
 
@@ -317,6 +433,8 @@ impl fmt::Debug for Surface {
 impl Drop for Surface {
     fn drop(&mut self) {
         unsafe {
+            self.semaphore_pool.destroy(&self.gpu);
+
             if self.swapchain != vk::SwapchainKHR::null() {
                 self.gpu
                     .vk_fns()
@@ -331,7 +449,7 @@ impl Drop for Surface {
 }
 
 /// Creates a new swapchain.
-fn create_swapchain(
+unsafe fn create_swapchain(
     gpu: &Gpu,
     info: &SwapchainInfo,
     config: &SurfaceConfig,
@@ -377,9 +495,20 @@ fn get_surface_capabilities(
     }
 }
 
+/// Converts a regular Vulkan result into a [`SurfaceError`].
 fn vk_to_surface_err(err: vk::Result) -> SurfaceError {
     match err {
-        vk::Result::ERROR_SURFACE_LOST_KHR => SurfaceError::SurfaceLost,
+        vk::Result::ERROR_SURFACE_LOST_KHR => SurfaceError::Lost,
         _ => SurfaceError::UnexpectedVulkanBehavior,
+    }
+}
+
+/// Converts a regular Vulkan result into a [`PresentError<C>`].
+fn vk_to_present_err<C>(err: vk::Result) -> PresentError<C> {
+    match err {
+        vk::Result::ERROR_SURFACE_LOST_KHR => PresentError::Lost,
+        vk::Result::ERROR_OUT_OF_DATE_KHR => PresentError::OutOfDate,
+        vk::Result::TIMEOUT => PresentError::Timeout,
+        _ => PresentError::UnexpectedVulkanBehavior,
     }
 }
