@@ -687,6 +687,40 @@ impl Fns {
         );
     }
 
+    pub unsafe fn cmd_begin_render_pass(
+        &self,
+        buffer: vk::CommandBuffer,
+        info: &vk::RenderPassBeginInfo,
+        contents: vk::SubpassContents,
+    ) {
+        (self.device_v1_0.cmd_begin_render_pass)(buffer, info, contents);
+    }
+
+    pub unsafe fn cmd_bind_pipeline(&self, buffer: vk::CommandBuffer, pipeline: vk::Pipeline) {
+        (self.device_v1_0.cmd_bind_pipeline)(buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
+    }
+
+    pub unsafe fn cmd_draw(
+        &self,
+        buffer: vk::CommandBuffer,
+        vertex_count: u32,
+        instance_count: u32,
+        first_vertex: u32,
+        first_instance: u32,
+    ) {
+        (self.device_v1_0.cmd_draw)(
+            buffer,
+            vertex_count,
+            instance_count,
+            first_vertex,
+            first_instance,
+        );
+    }
+
+    pub unsafe fn cmd_end_render_pass(&self, buffer: vk::CommandBuffer) {
+        (self.device_v1_0.cmd_end_render_pass)(buffer);
+    }
+
     //
     // QUEUE FUNCTIONS
     //
