@@ -125,7 +125,7 @@ pub unsafe trait SurfaceContents {
     ///
     /// This function must not be used twice without calling [`SurfaceContents::notify_new_images`]
     /// in between.
-    unsafe fn notify_destroy_images(&mut self) -> Result<(), Self::Error>;
+    unsafe fn notify_destroy_images(&mut self);
 
     /// Notifies the [`SurfaceContents`] implementation that new images will now be used.
     ///
@@ -237,9 +237,7 @@ impl<C: SurfaceContents> SurfaceWithContents<C> {
             let height = config.height;
 
             if self.contents_valid {
-                self.contents
-                    .notify_destroy_images()
-                    .map_err(SurfaceError::Contents)?;
+                self.contents.notify_destroy_images();
                 self.contents_valid = false;
             }
 
