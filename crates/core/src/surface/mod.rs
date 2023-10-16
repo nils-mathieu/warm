@@ -415,6 +415,18 @@ impl Surface {
         &self.images
     }
 
+    /// Returns the color space of the images that were created for the swapchain.
+    #[inline(always)]
+    pub fn vk_color_space(&self) -> vk::ColorSpaceKHR {
+        self.info.color_space
+    }
+
+    /// Returns the format of the images that were created for the swapchain.
+    #[inline(always)]
+    pub fn vk_format(&self) -> vk::Format {
+        self.info.format
+    }
+
     /// Returns a reference to the GPU that the surface is using.
     #[inline(always)]
     pub fn gpu(&self) -> &Arc<Gpu> {
