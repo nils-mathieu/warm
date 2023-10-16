@@ -422,7 +422,7 @@ impl Fns {
         }
     }
 
-    pub unsafe fn free_command_buffer(
+    pub unsafe fn free_command_buffers(
         &self,
         device: vk::Device,
         command_pool: vk::CommandPool,
