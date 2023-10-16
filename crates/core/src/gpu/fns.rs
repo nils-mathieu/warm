@@ -462,6 +462,25 @@ impl Fns {
         }
     }
 
+    pub unsafe fn create_render_pass(
+        &self,
+        device: vk::Device,
+        info: &vk::RenderPassCreateInfo,
+    ) -> VkResult<vk::RenderPass> {
+        let mut render_pass = MaybeUninit::uninit();
+        let ret =
+            (self.device_v1_0.create_render_pass)(device, info, null(), render_pass.as_mut_ptr());
+
+        match ret {
+            vk::Result::SUCCESS => Ok(render_pass.assume_init()),
+            err => Err(err),
+        }
+    }
+
+    pub unsafe fn destroy_render_pass(&self, device: vk::Device, render_pass: vk::RenderPass) {
+        (self.device_v1_0.destroy_render_pass)(device, render_pass, null());
+    }
+
     //
     // COMMAND BUFFER FUNCTIONS
     //
