@@ -414,6 +414,12 @@ impl Surface {
     pub fn vk_images(&self) -> &[vk::Image] {
         &self.images
     }
+
+    /// Returns a reference to the GPU that the surface is using.
+    #[inline(always)]
+    pub fn gpu(&self) -> &Arc<Gpu> {
+        &self.gpu
+    }
 }
 
 impl fmt::Debug for Surface {
