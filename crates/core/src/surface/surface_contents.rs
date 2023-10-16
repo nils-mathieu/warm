@@ -64,6 +64,19 @@ impl<'a> FrameContext<'a> {
     }
 }
 
+/// Stores information about the images that were created for a swapchain.
+///
+/// An instance of this type is passed to [`SurfaceContents::notify_new_images`].
+#[derive(Debug, Clone)]
+pub struct ImagesInfo<'a> {
+    /// The images that were created.
+    pub images: &'a [vk::Image],
+    /// The width of the images.
+    pub width: u32,
+    /// The height of the images.
+    pub height: u32,
+}
+
 /// A trait for types that can be passed to [`Surface::present`].
 ///
 /// # Object Lifetime
@@ -101,6 +114,9 @@ pub unsafe trait SurfaceContents {
     /// An error that might occur when using this [`SurfaceContents`] implementation.
     type Error;
 
+    /// Some arguments passed to the [`SurfaceContents::render`] method.
+    type Args<'a>;
+
     /// Notifies the [`SurfaceContents`] implementation that the images it uses will be destroyed.
     ///
     /// It must destroy any resources that depend on those images.
@@ -120,7 +136,7 @@ pub unsafe trait SurfaceContents {
     ///
     /// If the [`SurfaceContents`] implementation depends on a [`Gpu`] connection, the provided
     /// images must belong to that same [`Gpu`] instance.
-    unsafe fn notify_new_images(&mut self, images: &[vk::Image]) -> Result<(), Self::Error>;
+    unsafe fn notify_new_images(&mut self, info: ImagesInfo) -> Result<(), Self::Error>;
 
     /// Renders the contents of the surface to the given image.
     ///
@@ -132,7 +148,11 @@ pub unsafe trait SurfaceContents {
     ///
     /// If the [`SurfaceContents`] implementation depends on a [`Gpu`] connection, the provided
     /// [`FrameContext`] must belong to that same [`Gpu`] instance.
-    unsafe fn render(&mut self, ctx: &mut FrameContext) -> Result<(), Self::Error>;
+    unsafe fn render(
+        &mut self,
+        ctx: &mut FrameContext,
+        args: Self::Args<'_>,
+    ) -> Result<(), Self::Error>;
 }
 
 /// Wraps a [`Surface`] and a [`SurfaceContents`] to keep up-to-date with it.
@@ -213,6 +233,9 @@ impl<C: SurfaceContents> SurfaceWithContents<C> {
         config: SurfaceConfig,
     ) -> Result<(), SurfaceError<C::Error>> {
         unsafe {
+            let width = config.width;
+            let height = config.height;
+
             if self.contents_valid {
                 self.contents
                     .notify_destroy_images()
@@ -225,7 +248,11 @@ impl<C: SurfaceContents> SurfaceWithContents<C> {
                 .map_err(SurfaceError::cast_contents)?;
 
             self.contents
-                .notify_new_images(self.surface.vk_images())
+                .notify_new_images(ImagesInfo {
+                    width,
+                    height,
+                    images: self.surface.vk_images(),
+                })
                 .map_err(SurfaceError::Contents)?;
             self.contents_valid = true;
         }
@@ -251,11 +278,11 @@ impl<C: SurfaceContents> SurfaceWithContents<C> {
 
     /// Presents an additional image to the surface, using the managed [`SurfaceContents`]
     /// implementation.
-    pub fn present(&mut self) -> Result<(), PresentError<C::Error>> {
+    pub fn present(&mut self, args: C::Args<'_>) -> Result<(), PresentError<C::Error>> {
         if !self.contents_valid {
             return Err(PresentError::OutOfDate);
         }
 
-        unsafe { self.surface.present(&mut self.contents) }
+        unsafe { self.surface.present(&mut self.contents, args) }
     }
 }

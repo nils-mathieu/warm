@@ -337,7 +337,11 @@ impl Surface {
     /// The provided [`SurfaceContents`] implementation must be up-to-date. In other words, it must
     /// be kept up-to-date with the current state of the surface and its swapchain using
     /// [`SurfaceContents::notify_destroy_images`] and [`SurfaceContents::notify_new_images`].
-    pub unsafe fn present<C>(&mut self, contents: &mut C) -> Result<(), PresentError<C::Error>>
+    pub unsafe fn present<C>(
+        &mut self,
+        contents: &mut C,
+        args: C::Args<'_>,
+    ) -> Result<(), PresentError<C::Error>>
     where
         C: SurfaceContents,
     {
@@ -373,7 +377,7 @@ impl Surface {
             };
 
             contents
-                .render(&mut context)
+                .render(&mut context, args)
                 .map_err(PresentError::Contents)?;
 
             let present_info = vk::PresentInfoKHR {
