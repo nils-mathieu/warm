@@ -481,6 +481,154 @@ impl Fns {
         (self.device_v1_0.destroy_render_pass)(device, render_pass, null());
     }
 
+    pub unsafe fn create_image_view(
+        &self,
+        device: vk::Device,
+        info: &vk::ImageViewCreateInfo,
+    ) -> VkResult<vk::ImageView> {
+        let mut image_view = MaybeUninit::uninit();
+        let ret =
+            (self.device_v1_0.create_image_view)(device, info, null(), image_view.as_mut_ptr());
+
+        match ret {
+            vk::Result::SUCCESS => Ok(image_view.assume_init()),
+            err => Err(err),
+        }
+    }
+
+    pub unsafe fn destroy_image_view(&self, device: vk::Device, image_view: vk::ImageView) {
+        (self.device_v1_0.destroy_image_view)(device, image_view, null());
+    }
+
+    pub unsafe fn create_framebuffer(
+        &self,
+        device: vk::Device,
+        info: &vk::FramebufferCreateInfo,
+    ) -> VkResult<vk::Framebuffer> {
+        let mut framebuffer = MaybeUninit::uninit();
+        let ret =
+            (self.device_v1_0.create_framebuffer)(device, info, null(), framebuffer.as_mut_ptr());
+
+        match ret {
+            vk::Result::SUCCESS => Ok(framebuffer.assume_init()),
+            err => Err(err),
+        }
+    }
+
+    pub unsafe fn destroy_framebuffer(&self, device: vk::Device, framebuffer: vk::Framebuffer) {
+        (self.device_v1_0.destroy_framebuffer)(device, framebuffer, null());
+    }
+
+    pub unsafe fn create_shader_module(
+        &self,
+        device: vk::Device,
+        info: &vk::ShaderModuleCreateInfo,
+    ) -> VkResult<vk::ShaderModule> {
+        let mut shader_module = MaybeUninit::uninit();
+        let ret = (self.device_v1_0.create_shader_module)(
+            device,
+            info,
+            null(),
+            shader_module.as_mut_ptr(),
+        );
+
+        match ret {
+            vk::Result::SUCCESS => Ok(shader_module.assume_init()),
+            err => Err(err),
+        }
+    }
+
+    pub unsafe fn destroy_shader_module(
+        &self,
+        device: vk::Device,
+        shader_module: vk::ShaderModule,
+    ) {
+        (self.device_v1_0.destroy_shader_module)(device, shader_module, null());
+    }
+
+    pub unsafe fn create_pipeline_layout(
+        &self,
+        device: vk::Device,
+        info: &vk::PipelineLayoutCreateInfo,
+    ) -> VkResult<vk::PipelineLayout> {
+        let mut pipeline_layout = MaybeUninit::uninit();
+        let ret = (self.device_v1_0.create_pipeline_layout)(
+            device,
+            info,
+            null(),
+            pipeline_layout.as_mut_ptr(),
+        );
+
+        match ret {
+            vk::Result::SUCCESS => Ok(pipeline_layout.assume_init()),
+            err => Err(err),
+        }
+    }
+
+    pub unsafe fn destroy_pipeline_layout(
+        &self,
+        device: vk::Device,
+        pipeline_layout: vk::PipelineLayout,
+    ) {
+        (self.device_v1_0.destroy_pipeline_layout)(device, pipeline_layout, null());
+    }
+
+    pub unsafe fn create_graphics_pipelines<C>(
+        &self,
+        device: vk::Device,
+        cache: vk::PipelineCache,
+        infos: &[vk::GraphicsPipelineCreateInfo],
+        ret: *mut vk::Pipeline,
+    ) -> VkResult<()> {
+        match (self.device_v1_0.create_graphics_pipelines)(
+            device,
+            cache,
+            infos.len() as u32,
+            infos.as_ptr(),
+            null(),
+            ret,
+        ) {
+            vk::Result::SUCCESS => Ok(()),
+            err => Err(err),
+        }
+    }
+
+    pub unsafe fn destroy_pipeline(&self, device: vk::Device, pipeline: vk::Pipeline) {
+        (self.device_v1_0.destroy_pipeline)(device, pipeline, null());
+    }
+
+    pub unsafe fn create_buffer(
+        &self,
+        device: vk::Device,
+        info: &vk::BufferCreateInfo,
+    ) -> VkResult<vk::Buffer> {
+        let mut buffer = MaybeUninit::uninit();
+        let ret = (self.device_v1_0.create_buffer)(device, info, null(), buffer.as_mut_ptr());
+
+        match ret {
+            vk::Result::SUCCESS => Ok(buffer.assume_init()),
+            err => Err(err),
+        }
+    }
+
+    pub unsafe fn destroy_buffer(&self, device: vk::Device, buffer: vk::Buffer) {
+        (self.device_v1_0.destroy_buffer)(device, buffer, null());
+    }
+
+    pub unsafe fn get_buffer_memory_requirements(
+        &self,
+        device: vk::Device,
+        buffer: vk::Buffer,
+    ) -> vk::MemoryRequirements {
+        let mut requirements = MaybeUninit::uninit();
+        (self.device_v1_0.get_buffer_memory_requirements)(
+            device,
+            buffer,
+            requirements.as_mut_ptr(),
+        );
+        requirements.assume_init()
+    }
+
     //
     // COMMAND BUFFER FUNCTIONS
     //
