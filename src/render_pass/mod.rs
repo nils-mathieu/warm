@@ -221,21 +221,25 @@ where
         subpasses: Subpasses,
     ) -> Result<Self, RenderPassError> {
         let builder = RefCell::new(RenderPassCreateInfoBuilder::default());
-        let mut error = Ok(());
+        let mut error = None;
 
         attachments.register(|id, desc| builder.borrow_mut().register_attachment(id, desc));
         subpasses.register(
             |id, layout| match builder.borrow_mut().request_attachment(id, layout) {
                 Some(index) => index,
                 None => {
-                    if error.is_ok() {
-                        error = Err(RenderPassError::MissingAttachment);
+                    if error.is_none() {
+                        error = Some(RenderPassError::MissingAttachment);
                     }
                     usize::MAX
                 }
             },
             |info| builder.borrow_mut().register_subpass(info),
         );
+
+        if let Some(err) = error {
+            return Err(err);
+        }
 
         let info = builder.borrow_mut().build();
 
@@ -273,6 +277,17 @@ where
     type Args<'a> = RenderPassArgs<'a, Attachments, Subpasses>;
 
     unsafe fn notify_destroy_images(&mut self) {
+        for per_frame in &self.per_frame {
+            unsafe {
+                let _ = self.gpu.vk_fns().wait_for_fences(
+                    self.gpu.vk_device(),
+                    &[per_frame.fence],
+                    true,
+                    u64::MAX,
+                );
+            }
+        }
+
         self.attachments.notify_destroying_output();
 
         for per_frame in &mut self.per_frame {
@@ -349,10 +364,15 @@ where
                 per_frame.command_buffer,
                 vk::CommandBufferResetFlags::empty(),
             )?;
-            self.gpu.vk_fns().begin_command_buffer(
-                per_frame.command_buffer,
-                &vk::CommandBufferBeginInfo::default(),
-            )?;
+
+            let begin_info = vk::CommandBufferBeginInfo {
+                flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
+                ..Default::default()
+            };
+
+            self.gpu
+                .vk_fns()
+                .begin_command_buffer(per_frame.command_buffer, &begin_info)?;
         }
 
         //
@@ -485,6 +505,9 @@ struct RenderPassCreateInfoBuilder {
     attachment_refs: Vec<vk::AttachmentReference>,
     /// The list of all requested subpasses.
     subpass_descs: Vec<vk::SubpassDescription>,
+
+    /// The dependencies between subpasses.
+    dependencies: Vec<vk::SubpassDependency>,
 }
 
 impl RenderPassCreateInfoBuilder {
@@ -540,15 +563,13 @@ impl RenderPassCreateInfoBuilder {
         // Fix the subpass descriptions.
 
         for desc in &mut self.subpass_descs {
-            unsafe {
-                if desc.color_attachment_count > 0 {
-                    desc.p_color_attachments = self
-                        .attachment_refs
-                        .as_ptr()
-                        .add(desc.p_color_attachments as usize);
-                } else {
-                    desc.p_color_attachments = std::ptr::null();
-                }
+            if desc.color_attachment_count > 0 {
+                desc.p_color_attachments = self
+                    .attachment_refs
+                    .as_ptr()
+                    .wrapping_add(desc.p_color_attachments as usize);
+            } else {
+                desc.p_color_attachments = std::ptr::null();
             }
         }
 
@@ -557,8 +578,8 @@ impl RenderPassCreateInfoBuilder {
             p_attachments: self.attachment_descs.as_ptr(),
             subpass_count: self.subpass_descs.len() as u32,
             p_subpasses: self.subpass_descs.as_ptr(),
-            dependency_count: 0,
-            p_dependencies: std::ptr::null(),
+            dependency_count: self.dependencies.len() as u32,
+            p_dependencies: self.dependencies.as_ptr(),
             flags: vk::RenderPassCreateFlags::empty(),
             ..Default::default()
         }
@@ -568,7 +589,8 @@ impl RenderPassCreateInfoBuilder {
 /// Creates a new command pool.
 fn create_command_pool(gpu: &Gpu) -> Result<vk::CommandPool, VulkanError> {
     let info = vk::CommandPoolCreateInfo {
-        flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
+        flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER
+            | vk::CommandPoolCreateFlags::TRANSIENT,
         queue_family_index: gpu.vk_queue_family(),
         ..Default::default()
     };
