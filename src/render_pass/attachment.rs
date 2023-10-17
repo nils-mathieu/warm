@@ -1,9 +1,11 @@
 //! Defines the [`Attachment`] trait.
 
 use std::any::TypeId;
+use std::sync::Arc;
 
 use ash::vk;
 
+use crate::gpu::Gpu;
 use crate::surface::ImagesInfo;
 use crate::VulkanError;
 
@@ -31,6 +33,114 @@ pub trait Attachment: 'static {
 
     /// Notifies the attachment that the output image has changed.
     fn notify_output_changed(&mut self, info: &ImagesInfo) -> Result<(), VulkanError>;
+}
+
+/// An implementation of [`Attachment`] that represents the output of a render pass.
+#[derive(Debug)]
+pub struct OutputAttachment {
+    /// The GPU to which this attachment is bound to.
+    gpu: Arc<Gpu>,
+
+    /// The output format of the attachment.
+    format: vk::Format,
+
+    /// The image views of the output images.
+    views: Vec<vk::ImageView>,
+}
+
+impl OutputAttachment {
+    /// Creates a new [`OutputAttachment`].
+    pub fn new(gpu: Arc<Gpu>, format: vk::Format) -> Self {
+        Self {
+            gpu,
+            format,
+            views: Vec::new(),
+        }
+    }
+}
+
+impl Attachment for OutputAttachment {
+    type ClearValue = ClearColorValue<f32>;
+
+    fn description(&self) -> vk::AttachmentDescription {
+        vk::AttachmentDescription {
+            initial_layout: vk::ImageLayout::UNDEFINED,
+            final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
+            flags: vk::AttachmentDescriptionFlags::empty(),
+            format: self.format,
+            load_op: vk::AttachmentLoadOp::CLEAR,
+            store_op: vk::AttachmentStoreOp::STORE,
+            stencil_load_op: vk::AttachmentLoadOp::DONT_CARE,
+            stencil_store_op: vk::AttachmentStoreOp::DONT_CARE,
+            samples: vk::SampleCountFlags::TYPE_1,
+        }
+    }
+
+    #[inline(always)]
+    unsafe fn image_view(&self, index: usize) -> vk::ImageView {
+        unsafe { *self.views.get_unchecked(index) }
+    }
+
+    fn notify_destroying_output(&mut self) {
+        for view in self.views.drain(..) {
+            unsafe {
+                self.gpu
+                    .vk_fns()
+                    .destroy_image_view(self.gpu.vk_device(), view)
+            };
+        }
+    }
+
+    fn notify_output_changed(&mut self, info: &ImagesInfo) -> Result<(), VulkanError> {
+        if info.format != self.format {
+            return Err(VulkanError::ERROR_FORMAT_NOT_SUPPORTED);
+        }
+
+        for &image in info.images {
+            let info = vk::ImageViewCreateInfo {
+                components: vk::ComponentMapping {
+                    r: vk::ComponentSwizzle::R,
+                    g: vk::ComponentSwizzle::G,
+                    b: vk::ComponentSwizzle::B,
+                    a: vk::ComponentSwizzle::A,
+                },
+                flags: vk::ImageViewCreateFlags::empty(),
+                format: self.format,
+                image,
+                subresource_range: vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    base_array_layer: 0,
+                    base_mip_level: 0,
+                    layer_count: 1,
+                    level_count: 1,
+                },
+                view_type: vk::ImageViewType::TYPE_2D,
+                ..Default::default()
+            };
+
+            let view = unsafe {
+                self.gpu
+                    .vk_fns()
+                    .create_image_view(self.gpu.vk_device(), &info)?
+            };
+
+            self.views.push(view);
+        }
+
+        Ok(())
+    }
+}
+
+impl Drop for OutputAttachment {
+    fn drop(&mut self) {
+        for view in self.views.drain(..) {
+            unsafe {
+                self.gpu
+                    .vk_fns()
+                    .destroy_image_view(self.gpu.vk_device(), view)
+            };
+        }
+    }
 }
 
 /// A list of render pass [`Attachment`]s.
