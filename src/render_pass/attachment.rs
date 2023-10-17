@@ -8,11 +8,11 @@ use crate::surface::ImagesInfo;
 use crate::VulkanError;
 
 /// A trait for types that may be used as an attachment in a [`RenderPass`](super::RenderPass).
-pub trait Attachment {
+pub trait Attachment: 'static {
     /// A value that's used to clear the attachment.
     ///
     /// If the attachment does not need to be cleared, use `()`.
-    type ClearValue;
+    type ClearValue: ClearValue;
 
     /// Creates an [`vk::AttachmentDescription`] for this attachment type.
     fn description(&self) -> vk::AttachmentDescription;
@@ -66,6 +66,78 @@ pub trait AttachmentList {
     /// Calls a function for each attachment in this list.
     fn register(&self, register: impl FnMut(TypeId, vk::AttachmentDescription));
 }
+
+macro_rules! impl_AttachmentList {
+    ( $($T:ident),* ) => {
+        #[allow(unused_variables, unused_mut, non_snake_case)]
+        impl< $($T,)* > AttachmentList for ( $($T,)* )
+        where
+            $( $T: Attachment, )*
+        {
+            type ClearValues = ( $($T::ClearValue,)* );
+
+            type RawClearValues = [vk::ClearValue; impl_AttachmentList!( @ $($T,)* )];
+
+            fn build_clear_values(clear_values: Self::ClearValues) -> Self::RawClearValues {
+                let ( $($T,)* ) = clear_values;
+
+                [
+                    $( $T.into_clear_value(), )*
+                ]
+            }
+
+            type RawImageViews = [vk::ImageView; impl_AttachmentList!( @ $($T,)* )];
+
+            unsafe fn image_views(&self, index: usize) -> Self::RawImageViews {
+                let ( $($T,)* ) = self;
+
+                [
+                    $( unsafe { $T.image_view(index) }, )*
+                ]
+            }
+
+            fn notify_destroying_output(&mut self) {
+                let ( $($T,)* ) = self;
+
+                $( $T.notify_destroying_output(); )*
+            }
+
+            fn notify_output_changed(&mut self, info: &ImagesInfo) -> Result<(), VulkanError> {
+                let ( $($T,)* ) = self;
+
+                $(
+                    $T.notify_output_changed(info)?;
+                )*
+
+                Ok(())
+            }
+
+            fn register(&self, mut register: impl FnMut(TypeId, vk::AttachmentDescription)) {
+                let ( $($T,)* ) = self;
+
+                $(
+                    register(TypeId::of::<$T>(), $T.description());
+                )*
+            }
+        }
+    };
+
+    ( @ $first:ident, $($rest:ident,)* ) => {
+        1 + impl_AttachmentList!(@ $($rest,)*)
+    };
+
+    ( @ ) => {
+        0
+    };
+}
+
+impl_AttachmentList!();
+impl_AttachmentList!(A);
+impl_AttachmentList!(A, B);
+impl_AttachmentList!(A, B, C);
+impl_AttachmentList!(A, B, C, D);
+impl_AttachmentList!(A, B, C, D, E);
+impl_AttachmentList!(A, B, C, D, E, F);
 
 /// A trait for types that may be used to clear a render pass attachment.
 pub trait ClearValue {

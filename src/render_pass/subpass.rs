@@ -56,3 +56,52 @@ pub trait SubpassList {
     /// is only one subpass in the list, `next_subpass` must never be called.
     fn record(&mut self, args: Self::Args<'_>, next_subpass: impl FnMut());
 }
+
+macro_rules! impl_SubpassList {
+    ( $( $T:ident $t:ident ),* ) => {
+        #[allow(unused_variables, unused_mut, non_snake_case)]
+        impl< $($T,)* > SubpassList for ( $($T,)* )
+        where
+            $( $T: Subpass, )*
+        {
+            fn register(
+                &self,
+                mut request_attachment: impl FnMut(TypeId, vk::ImageLayout) -> usize,
+                mut register: impl FnMut(SubpassDescription),
+            ) {
+                let ( $($T,)* ) = self;
+
+                $(
+                    register($T.description(&mut request_attachment));
+                )*
+            }
+
+            type Args<'a> = ( $( $T::Args<'a>, )* );
+
+            fn record(&mut self, args: Self::Args<'_>, mut next_subpass: impl FnMut()) {
+                let ( $($T,)* ) = self;
+                let ( $($t,)* ) = args;
+
+                impl_SubpassList!( alternate, next_subpass(), $( $T.record($t), )* );
+            }
+        }
+    };
+
+    ( alternate, $e:expr, $first:expr, $( $rest:expr, )* ) => {
+        $first;
+        $(
+            $e;
+            $rest;
+        )*
+    };
+
+    ( alternate, $e:expr, ) => {};
+}
+
+impl_SubpassList!();
+impl_SubpassList!(A a);
+impl_SubpassList!(A a, B b);
+impl_SubpassList!(A a, B b, C c);
+impl_SubpassList!(A a, B b, C c, D d);
+impl_SubpassList!(A a, B b, C c, D d, E e);
+impl_SubpassList!(A a, B b, C c, D d, E e, F f);
