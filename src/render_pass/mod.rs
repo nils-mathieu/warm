@@ -387,11 +387,12 @@ where
             );
         }
 
-        self.subpasses.record(args.args, || unsafe {
-            self.gpu
-                .vk_fns()
-                .cmd_next_subpass(per_frame.command_buffer, vk::SubpassContents::INLINE);
-        });
+        self.subpasses
+            .record(per_frame.command_buffer, args.args, || unsafe {
+                self.gpu
+                    .vk_fns()
+                    .cmd_next_subpass(per_frame.command_buffer, vk::SubpassContents::INLINE);
+            });
 
         unsafe {
             self.gpu
