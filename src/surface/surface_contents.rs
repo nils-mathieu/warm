@@ -5,8 +5,9 @@ use std::sync::Arc;
 use ash::vk;
 
 use crate::gpu::Gpu;
+use crate::VulkanError;
 
-use super::{PresentError, Surface, SurfaceConfig, SurfaceError, UnexpectedVulkanBehavior};
+use super::{PresentError, Surface, SurfaceConfig, SurfaceError};
 
 /// Contains data that's relative to a frame being rendered.
 #[derive(Debug)]
@@ -133,10 +134,7 @@ pub unsafe trait SurfaceContents {
     ///
     /// If the [`SurfaceContents`] implementation depends on a [`Gpu`] connection, the provided
     /// images must belong to that same [`Gpu`] instance.
-    unsafe fn notify_new_images(
-        &mut self,
-        info: ImagesInfo,
-    ) -> Result<(), UnexpectedVulkanBehavior>;
+    unsafe fn notify_new_images(&mut self, info: ImagesInfo) -> Result<(), VulkanError>;
 
     /// Renders the contents of the surface to the given image.
     ///
@@ -152,7 +150,7 @@ pub unsafe trait SurfaceContents {
         &mut self,
         ctx: &mut FrameContext,
         args: Self::Args<'_>,
-    ) -> Result<(), UnexpectedVulkanBehavior>;
+    ) -> Result<(), VulkanError>;
 }
 
 /// Wraps a [`Surface`] and a [`SurfaceContents`] to keep up-to-date with it.

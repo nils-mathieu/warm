@@ -50,7 +50,7 @@ fn surface_caps(
     unsafe {
         gpu.vk_fns()
             .get_physical_device_surface_capabilities(gpu.vk_physical_device(), surface)
-            .map_err(|_| SurfaceError::UnexpectedVulkanBehavior)
+            .map_err(Into::into)
     }
 }
 
@@ -118,9 +118,11 @@ fn get_surface_format(
 ) -> Result<vk::SurfaceFormatKHR, SurfaceError> {
     unsafe {
         let mut formats = Vec::new();
-        gpu.vk_fns()
-            .get_physical_device_surface_formats(gpu.vk_physical_device(), surface, &mut formats)
-            .map_err(|_| SurfaceError::UnexpectedVulkanBehavior)?;
+        gpu.vk_fns().get_physical_device_surface_formats(
+            gpu.vk_physical_device(),
+            surface,
+            &mut formats,
+        )?;
 
         // NOTE:
         //  We're reversing the iterator to get the first format that we prefer (if multiple
@@ -151,13 +153,11 @@ fn get_surface_format(
 fn get_present_modes(gpu: &Gpu, surface: vk::SurfaceKHR) -> Result<PresentModes, SurfaceError> {
     let mut modes = Vec::new();
     unsafe {
-        gpu.vk_fns()
-            .get_physical_device_surface_present_modes(
-                gpu.vk_physical_device(),
-                surface,
-                &mut modes,
-            )
-            .map_err(|_| SurfaceError::UnexpectedVulkanBehavior)?;
+        gpu.vk_fns().get_physical_device_surface_present_modes(
+            gpu.vk_physical_device(),
+            surface,
+            &mut modes,
+        )?;
     }
 
     let ret = modes

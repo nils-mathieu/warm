@@ -3,7 +3,8 @@
 use std::sync::Arc;
 
 use crate::gpu::Gpu;
-use crate::surface::{FrameContext, ImagesInfo, SurfaceContents, UnexpectedVulkanBehavior};
+use crate::surface::{FrameContext, ImagesInfo, SurfaceContents};
+use crate::VulkanError;
 
 pub mod attachment;
 pub mod subpass;
@@ -41,10 +42,7 @@ where
         unimplemented!();
     }
 
-    unsafe fn notify_new_images(
-        &mut self,
-        info: ImagesInfo,
-    ) -> Result<(), UnexpectedVulkanBehavior> {
+    unsafe fn notify_new_images(&mut self, info: ImagesInfo) -> Result<(), VulkanError> {
         unimplemented!();
     }
 
@@ -52,7 +50,7 @@ where
         &mut self,
         ctx: &mut FrameContext,
         args: Self::Args<'_>,
-    ) -> Result<(), UnexpectedVulkanBehavior> {
+    ) -> Result<(), VulkanError> {
         unimplemented!();
     }
 }

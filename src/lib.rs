@@ -7,4 +7,8 @@ pub mod gpu;
 pub mod render_pass;
 pub mod surface;
 
+mod error;
+
+pub use self::error::*;
+
 mod utility;

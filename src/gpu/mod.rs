@@ -289,7 +289,7 @@ fn create_device(device_info: &DeviceQuery, fns: &Fns) -> Result<vk::Device, Gpu
 
     unsafe {
         fns.create_device(device_info.physical_device, &create_info)
-            .map_err(|_| GpuError::UnexpectedVulkanBehavior)
+            .map_err(Into::into)
     }
 }
 
@@ -299,9 +299,9 @@ fn get_gpu_info(physical_device: vk::PhysicalDevice, fns: &Fns) -> Result<GpuInf
     let name_bytes = unsafe { &*(&props.device_name as *const [c_char; 256] as *const [u8; 256]) };
 
     let name = CStr::from_bytes_until_nul(name_bytes)
-        .map_err(|_| GpuError::UnexpectedVulkanBehavior)?
+        .map_err(|_| GpuError::UnexpectedBehavior)?
         .to_str()
-        .map_err(|_| GpuError::UnexpectedVulkanBehavior)?
+        .map_err(|_| GpuError::UnexpectedBehavior)?
         .into();
 
     let device_type = match props.device_type {
@@ -310,7 +310,7 @@ fn get_gpu_info(physical_device: vk::PhysicalDevice, fns: &Fns) -> Result<GpuInf
         vk::PhysicalDeviceType::DISCRETE_GPU => GpuType::Discrete,
         vk::PhysicalDeviceType::VIRTUAL_GPU => GpuType::Virtual,
         vk::PhysicalDeviceType::CPU => GpuType::Cpu,
-        _ => return Err(GpuError::UnexpectedVulkanBehavior),
+        _ => return Err(GpuError::UnexpectedBehavior),
     };
 
     Ok(GpuInfo {

@@ -7,10 +7,12 @@ use std::fmt;
 use std::mem::{transmute, MaybeUninit};
 use std::ptr::null;
 
-use ash::prelude::VkResult;
 use ash::vk;
 
 use crate::utility::VectorLike;
+use crate::VulkanError;
+
+type Result<T> = std::result::Result<T, VulkanError>;
 
 /// Contains function pointers loaded from the Vulkan dynamic library.
 ///
@@ -78,7 +80,7 @@ impl Fns {
     // STATIC AND ENTRY FUNCTIONS
     //
 
-    pub unsafe fn enumerate_instance_extension_properties<C>(&self, ret: &mut C) -> VkResult<()>
+    pub unsafe fn enumerate_instance_extension_properties<C>(&self, ret: &mut C) -> Result<()>
     where
         C: VectorLike<Item = vk::ExtensionProperties>,
     {
@@ -91,7 +93,7 @@ impl Fns {
         }
     }
 
-    pub unsafe fn create_instance(&self, info: &vk::InstanceCreateInfo) -> VkResult<vk::Instance> {
+    pub unsafe fn create_instance(&self, info: &vk::InstanceCreateInfo) -> Result<vk::Instance> {
         let mut instance = MaybeUninit::uninit();
 
         match (self.entry_v1_0.create_instance)(info, null(), instance.as_mut_ptr()) {
@@ -108,7 +110,7 @@ impl Fns {
         &self,
         instance: vk::Instance,
         ret: &mut C,
-    ) -> VkResult<()>
+    ) -> Result<()>
     where
         C: VectorLike<Item = vk::PhysicalDevice>,
     {
@@ -125,7 +127,7 @@ impl Fns {
         &self,
         physical_device: vk::PhysicalDevice,
         ret: &mut C,
-    ) -> VkResult<()>
+    ) -> Result<()>
     where
         C: VectorLike<Item = vk::ExtensionProperties>,
     {
@@ -142,7 +144,7 @@ impl Fns {
         &self,
         physical_device: vk::PhysicalDevice,
         ret: &mut C,
-    ) -> VkResult<()>
+    ) -> Result<()>
     where
         C: VectorLike<Item = vk::QueueFamilyProperties>,
     {
@@ -164,7 +166,7 @@ impl Fns {
         &self,
         physical_device: vk::PhysicalDevice,
         info: &vk::DeviceCreateInfo,
-    ) -> VkResult<vk::Device> {
+    ) -> Result<vk::Device> {
         let mut device = MaybeUninit::uninit();
         let ret =
             (self.instance_v1_0.create_device)(physical_device, info, null(), device.as_mut_ptr());
@@ -199,7 +201,7 @@ impl Fns {
         &self,
         instance: vk::Instance,
         info: &vk::Win32SurfaceCreateInfoKHR,
-    ) -> VkResult<vk::SurfaceKHR> {
+    ) -> Result<vk::SurfaceKHR> {
         let mut surface = MaybeUninit::uninit();
         let ret = (self.win32_surface.create_win32_surface_khr)(
             instance,
@@ -235,7 +237,7 @@ impl Fns {
         &self,
         intance: vk::Instance,
         info: &vk::XlibSurfaceCreateInfoKHR,
-    ) -> VkResult<vk::SurfaceKHR> {
+    ) -> Result<vk::SurfaceKHR> {
         let mut surface = MaybeUninit::uninit();
         let ret = (self.xlib_surface.create_xlib_surface_khr)(
             intance,
@@ -279,7 +281,7 @@ impl Fns {
         &self,
         physical_device: vk::PhysicalDevice,
         surface: vk::SurfaceKHR,
-    ) -> VkResult<vk::SurfaceCapabilitiesKHR> {
+    ) -> Result<vk::SurfaceCapabilitiesKHR> {
         let mut capabilities = MaybeUninit::uninit();
         let ret = (self.surface.get_physical_device_surface_capabilities_khr)(
             physical_device,
@@ -298,7 +300,7 @@ impl Fns {
         physical_device: vk::PhysicalDevice,
         surface: vk::SurfaceKHR,
         ret: &mut C,
-    ) -> VkResult<()>
+    ) -> Result<()>
     where
         C: VectorLike<Item = vk::SurfaceFormatKHR>,
     {
@@ -316,7 +318,7 @@ impl Fns {
         physical_device: vk::PhysicalDevice,
         surface: vk::SurfaceKHR,
         ret: &mut C,
-    ) -> VkResult<()>
+    ) -> Result<()>
     where
         C: VectorLike<Item = vk::PresentModeKHR>,
     {
@@ -333,7 +335,7 @@ impl Fns {
     // DEVICE FUNCTIONS
     //
 
-    pub unsafe fn device_wait_idle(&self, device: vk::Device) -> VkResult<()> {
+    pub unsafe fn device_wait_idle(&self, device: vk::Device) -> Result<()> {
         match (self.device_v1_0.device_wait_idle)(device) {
             vk::Result::SUCCESS => Ok(()),
             err => Err(err),
@@ -359,7 +361,7 @@ impl Fns {
         &self,
         device: vk::Device,
         info: &vk::SemaphoreCreateInfo,
-    ) -> VkResult<vk::Semaphore> {
+    ) -> Result<vk::Semaphore> {
         let mut semaphore = MaybeUninit::uninit();
         let ret = (self.device_v1_0.create_semaphore)(device, info, null(), semaphore.as_mut_ptr());
 
@@ -377,7 +379,7 @@ impl Fns {
         &self,
         device: vk::Device,
         info: &vk::FenceCreateInfo,
-    ) -> VkResult<vk::Fence> {
+    ) -> Result<vk::Fence> {
         let mut fence = MaybeUninit::uninit();
         let ret = (self.device_v1_0.create_fence)(device, info, null(), fence.as_mut_ptr());
 
@@ -395,7 +397,7 @@ impl Fns {
         &self,
         device: vk::Device,
         info: &vk::CommandPoolCreateInfo,
-    ) -> VkResult<vk::CommandPool> {
+    ) -> Result<vk::CommandPool> {
         let mut command_pool = MaybeUninit::uninit();
         let ret =
             (self.device_v1_0.create_command_pool)(device, info, null(), command_pool.as_mut_ptr());
@@ -415,7 +417,7 @@ impl Fns {
         device: vk::Device,
         info: &vk::CommandBufferAllocateInfo,
         output: *mut vk::CommandBuffer,
-    ) -> VkResult<()> {
+    ) -> Result<()> {
         match (self.device_v1_0.allocate_command_buffers)(device, info, output) {
             vk::Result::SUCCESS => Ok(()),
             err => Err(err),
@@ -442,7 +444,7 @@ impl Fns {
         fences: &[vk::Fence],
         wait_all: bool,
         timeout: u64,
-    ) -> VkResult<()> {
+    ) -> Result<()> {
         match (self.device_v1_0.wait_for_fences)(
             device,
             fences.len() as u32,
@@ -455,7 +457,7 @@ impl Fns {
         }
     }
 
-    pub unsafe fn reset_fences(&self, device: vk::Device, fences: &[vk::Fence]) -> VkResult<()> {
+    pub unsafe fn reset_fences(&self, device: vk::Device, fences: &[vk::Fence]) -> Result<()> {
         match (self.device_v1_0.reset_fences)(device, fences.len() as u32, fences.as_ptr()) {
             vk::Result::SUCCESS => Ok(()),
             err => Err(err),
@@ -466,7 +468,7 @@ impl Fns {
         &self,
         device: vk::Device,
         info: &vk::RenderPassCreateInfo,
-    ) -> VkResult<vk::RenderPass> {
+    ) -> Result<vk::RenderPass> {
         let mut render_pass = MaybeUninit::uninit();
         let ret =
             (self.device_v1_0.create_render_pass)(device, info, null(), render_pass.as_mut_ptr());
@@ -485,7 +487,7 @@ impl Fns {
         &self,
         device: vk::Device,
         info: &vk::ImageViewCreateInfo,
-    ) -> VkResult<vk::ImageView> {
+    ) -> Result<vk::ImageView> {
         let mut image_view = MaybeUninit::uninit();
         let ret =
             (self.device_v1_0.create_image_view)(device, info, null(), image_view.as_mut_ptr());
@@ -504,7 +506,7 @@ impl Fns {
         &self,
         device: vk::Device,
         info: &vk::FramebufferCreateInfo,
-    ) -> VkResult<vk::Framebuffer> {
+    ) -> Result<vk::Framebuffer> {
         let mut framebuffer = MaybeUninit::uninit();
         let ret =
             (self.device_v1_0.create_framebuffer)(device, info, null(), framebuffer.as_mut_ptr());
@@ -523,7 +525,7 @@ impl Fns {
         &self,
         device: vk::Device,
         info: &vk::ShaderModuleCreateInfo,
-    ) -> VkResult<vk::ShaderModule> {
+    ) -> Result<vk::ShaderModule> {
         let mut shader_module = MaybeUninit::uninit();
         let ret = (self.device_v1_0.create_shader_module)(
             device,
@@ -550,7 +552,7 @@ impl Fns {
         &self,
         device: vk::Device,
         info: &vk::PipelineLayoutCreateInfo,
-    ) -> VkResult<vk::PipelineLayout> {
+    ) -> Result<vk::PipelineLayout> {
         let mut pipeline_layout = MaybeUninit::uninit();
         let ret = (self.device_v1_0.create_pipeline_layout)(
             device,
@@ -579,7 +581,7 @@ impl Fns {
         cache: vk::PipelineCache,
         infos: &[vk::GraphicsPipelineCreateInfo],
         ret: *mut vk::Pipeline,
-    ) -> VkResult<()> {
+    ) -> Result<()> {
         match (self.device_v1_0.create_graphics_pipelines)(
             device,
             cache,
@@ -601,7 +603,7 @@ impl Fns {
         &self,
         device: vk::Device,
         info: &vk::BufferCreateInfo,
-    ) -> VkResult<vk::Buffer> {
+    ) -> Result<vk::Buffer> {
         let mut buffer = MaybeUninit::uninit();
         let ret = (self.device_v1_0.create_buffer)(device, info, null(), buffer.as_mut_ptr());
 
@@ -637,7 +639,7 @@ impl Fns {
         &self,
         buffer: vk::CommandBuffer,
         flags: vk::CommandBufferResetFlags,
-    ) -> VkResult<()> {
+    ) -> Result<()> {
         match (self.device_v1_0.reset_command_buffer)(buffer, flags) {
             vk::Result::SUCCESS => Ok(()),
             err => Err(err),
@@ -648,14 +650,14 @@ impl Fns {
         &self,
         buffer: vk::CommandBuffer,
         info: &vk::CommandBufferBeginInfo,
-    ) -> VkResult<()> {
+    ) -> Result<()> {
         match (self.device_v1_0.begin_command_buffer)(buffer, info) {
             vk::Result::SUCCESS => Ok(()),
             err => Err(err),
         }
     }
 
-    pub unsafe fn end_command_buffer(&self, buffer: vk::CommandBuffer) -> VkResult<()> {
+    pub unsafe fn end_command_buffer(&self, buffer: vk::CommandBuffer) -> Result<()> {
         match (self.device_v1_0.end_command_buffer)(buffer) {
             vk::Result::SUCCESS => Ok(()),
             err => Err(err),
@@ -730,14 +732,14 @@ impl Fns {
         queue: vk::Queue,
         info: &[vk::SubmitInfo],
         fence: vk::Fence,
-    ) -> VkResult<()> {
+    ) -> Result<()> {
         match (self.device_v1_0.queue_submit)(queue, info.len() as u32, info.as_ptr(), fence) {
             vk::Result::SUCCESS => Ok(()),
             err => Err(err),
         }
     }
 
-    pub unsafe fn queue_wait_idle(&self, queue: vk::Queue) -> VkResult<()> {
+    pub unsafe fn queue_wait_idle(&self, queue: vk::Queue) -> Result<()> {
         match (self.device_v1_0.queue_wait_idle)(queue) {
             vk::Result::SUCCESS => Ok(()),
             err => Err(err),
@@ -752,7 +754,7 @@ impl Fns {
         &self,
         device: vk::Device,
         info: &vk::SwapchainCreateInfoKHR,
-    ) -> VkResult<vk::SwapchainKHR> {
+    ) -> Result<vk::SwapchainKHR> {
         let mut swapchain = MaybeUninit::uninit();
         let ret =
             (self.swapchain.create_swapchain_khr)(device, info, null(), swapchain.as_mut_ptr());
@@ -774,7 +776,7 @@ impl Fns {
         timeout: u64,
         semaphore: vk::Semaphore,
         fence: vk::Fence,
-    ) -> VkResult<(u32, bool)> {
+    ) -> Result<(u32, bool)> {
         let mut image_index = MaybeUninit::uninit();
         let ret = (self.swapchain.acquire_next_image_khr)(
             device,
@@ -792,11 +794,7 @@ impl Fns {
         }
     }
 
-    pub unsafe fn queue_present(
-        &self,
-        queue: vk::Queue,
-        info: &vk::PresentInfoKHR,
-    ) -> VkResult<()> {
+    pub unsafe fn queue_present(&self, queue: vk::Queue, info: &vk::PresentInfoKHR) -> Result<()> {
         match (self.swapchain.queue_present_khr)(queue, info) {
             vk::Result::SUCCESS => Ok(()),
             error => Err(error),
@@ -808,7 +806,7 @@ impl Fns {
         device: vk::Device,
         swapchain: vk::SwapchainKHR,
         ret: &mut C,
-    ) -> VkResult<()>
+    ) -> Result<()>
     where
         C: VectorLike<Item = vk::Image>,
     {

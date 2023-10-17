@@ -10,6 +10,7 @@ use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
 use crate::gpu::Gpu;
 use crate::utility::ScopeGuard;
+use crate::VulkanError;
 
 mod error;
 mod surface_contents;
@@ -350,10 +351,7 @@ impl Surface {
         }
 
         unsafe {
-            let acquire_semaphore = self
-                .semaphore_pool
-                .get(&self.gpu)
-                .map_err(|_| PresentError::UnexpectedVulkanBehavior)?;
+            let acquire_semaphore = self.semaphore_pool.get(&self.gpu)?;
 
             let (image_index, _suboptimal) = self
                 .gpu
@@ -516,19 +514,19 @@ fn get_surface_capabilities(
 }
 
 /// Converts a regular Vulkan result into a [`SurfaceError`].
-fn vk_to_surface_err(err: vk::Result) -> SurfaceError {
+fn vk_to_surface_err(err: VulkanError) -> SurfaceError {
     match err {
         vk::Result::ERROR_SURFACE_LOST_KHR => SurfaceError::Lost,
-        _ => SurfaceError::UnexpectedVulkanBehavior,
+        err => SurfaceError::UnexpectedError(err),
     }
 }
 
 /// Converts a regular Vulkan result into a [`PresentError`].
-fn vk_to_present_err(err: vk::Result) -> PresentError {
+fn vk_to_present_err(err: VulkanError) -> PresentError {
     match err {
         vk::Result::ERROR_SURFACE_LOST_KHR => PresentError::Lost,
         vk::Result::ERROR_OUT_OF_DATE_KHR => PresentError::OutOfDate,
         vk::Result::TIMEOUT => PresentError::Timeout,
-        _ => PresentError::UnexpectedVulkanBehavior,
+        err => PresentError::UnexpectedError(err),
     }
 }

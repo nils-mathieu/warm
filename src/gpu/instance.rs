@@ -39,7 +39,9 @@ fn get_instance_extensions(fns: &Fns) -> Result<(Vec<*const i8>, Extensions), Gp
         match fns.enumerate_instance_extension_properties(&mut available) {
             Ok(()) => (),
             Err(vk::Result::ERROR_EXTENSION_NOT_PRESENT) => return Err(GpuError::Unsupported),
-            Err(_) => return Err(GpuError::UnexpectedVulkanBehavior),
+            Err(err) => {
+                return Err(GpuError::UnexpectedError(err));
+            }
         }
     }
 
@@ -98,10 +100,7 @@ pub fn create(fns: &Fns) -> Result<InstanceResult, GpuError> {
         ..Default::default()
     };
 
-    let instance = unsafe {
-        fns.create_instance(&create_info)
-            .map_err(|_| GpuError::UnexpectedVulkanBehavior)?
-    };
+    let instance = unsafe { fns.create_instance(&create_info)? };
 
     Ok(InstanceResult {
         instance,

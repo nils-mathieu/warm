@@ -2,10 +2,10 @@
 
 use std::ops::Deref;
 
-use ash::prelude::VkResult;
 use ash::vk;
 
 use crate::gpu::Gpu;
+use crate::VulkanError;
 
 /// A pool of [`vk::Semaphore`]s that can be used to cheaply synchronize operations.
 ///
@@ -24,7 +24,7 @@ impl SemaphorePool {
     /// before the [`Gpu`] instance is destroyed.
     ///
     /// - The same [`Gpu`] instance must be used for all calls to this function.
-    pub unsafe fn get(&mut self, gpu: &Gpu) -> VkResult<SemaphoreInPool> {
+    pub unsafe fn get(&mut self, gpu: &Gpu) -> Result<SemaphoreInPool, VulkanError> {
         let semaphore = match self.0.pop() {
             Some(s) => s,
             None => unsafe {

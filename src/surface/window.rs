@@ -73,8 +73,7 @@ fn create_win32_surface(
 
         let surface = gpu
             .vk_fns()
-            .create_win32_surface(gpu.vk_instance(), &info)
-            .map_err(|_| SurfaceError::UnexpectedVulkanBehavior)?;
+            .create_win32_surface(gpu.vk_instance(), &info)?;
 
         Ok(surface)
     }
@@ -107,10 +106,7 @@ fn create_xlib_surface(
             ..Default::default()
         };
 
-        let surface = gpu
-            .vk_fns()
-            .create_xlib_surface(gpu.vk_instance(), &info)
-            .map_err(|_| SurfaceError::UnexpectedVulkanBehavior)?;
+        let surface = gpu.vk_fns().create_xlib_surface(gpu.vk_instance(), &info)?;
 
         Ok(surface)
     }
