@@ -4,6 +4,7 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
 pub mod gpu;
+pub mod render_pass;
 pub mod surface;
 
 mod utility;
