@@ -4,6 +4,9 @@ use std::any::TypeId;
 
 use ash::vk;
 
+use crate::surface::ImagesInfo;
+use crate::VulkanError;
+
 /// A trait for types that may be used as an attachment in a [`RenderPass`](super::RenderPass).
 pub trait Attachment {
     /// A value that's used to clear the attachment.
@@ -15,7 +18,19 @@ pub trait Attachment {
     fn description(&self) -> vk::AttachmentDescription;
 
     /// Returns the [`vk::ImageView`] of this attachment.
-    fn image_view(&self) -> vk::ImageView;
+    ///
+    /// # Safety
+    ///
+    /// - `index` must be less than the number of images notified by [`notify_output_changed`].
+    ///
+    /// [`notify_output_changed`]: Attachment::notify_output_changed
+    unsafe fn image_view(&self, index: usize) -> vk::ImageView;
+
+    /// Notifies the attachment that the output images are being destroyed.
+    fn notify_destroying_output(&mut self);
+
+    /// Notifies the attachment that the output image has changed.
+    fn notify_output_changed(&mut self, info: &ImagesInfo) -> Result<(), VulkanError>;
 }
 
 /// A list of render pass [`Attachment`]s.
@@ -30,17 +45,26 @@ pub trait AttachmentList {
     /// Converts [`Self::ClearValues`] into [`Self::RawClearValues`].
     fn build_clear_values(clear_values: Self::ClearValues) -> Self::RawClearValues;
 
-    /// A tuple of references to the attachments in this list.
-    type References;
-
     /// An array-like type that may be turend into a regular Rust slice of [`vk::ImageView`].
-    type RawReferences: AsRef<[vk::ImageView]>;
+    type RawImageViews: AsRef<[vk::ImageView]>;
 
-    /// Converts [`Self::References`] into [`Self::RawReferences`].
-    fn build_references(references: Self::References) -> Self::RawReferences;
+    /// Returns the [`vk::ImageView`]s of the attachments in this list.
+    ///
+    /// The images view are associated with the swapchain image `index`.
+    ///
+    /// # Safety
+    ///
+    /// `index` must be less than the number of images notified by [`notify_output_changed`].
+    unsafe fn image_views(&self, index: usize) -> Self::RawImageViews;
+
+    /// Notifies the attachments that the output images are being destroyed.
+    fn notify_destroying_output(&mut self);
+
+    /// Notifies the attachments that the output image has changed.
+    fn notify_output_changed(&mut self, info: &ImagesInfo) -> Result<(), VulkanError>;
 
     /// Calls a function for each attachment in this list.
-    fn register_attachments(register: impl FnMut(TypeId, vk::AttachmentDescription));
+    fn register(&self, register: impl FnMut(TypeId, vk::AttachmentDescription));
 }
 
 /// A trait for types that may be used to clear a render pass attachment.
@@ -50,6 +74,7 @@ pub trait ClearValue {
 }
 
 impl ClearValue for () {
+    #[inline(always)]
     fn into_clear_value(self) -> vk::ClearValue {
         unsafe { std::mem::zeroed() }
     }

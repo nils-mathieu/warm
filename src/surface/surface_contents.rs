@@ -76,6 +76,8 @@ pub struct ImagesInfo<'a> {
     pub width: u32,
     /// The height of the images.
     pub height: u32,
+    /// The format of the output images.
+    pub format: vk::Format,
 }
 
 /// A trait for types that can be passed to [`Surface::present`].
@@ -248,6 +250,7 @@ impl<C: SurfaceContents> SurfaceWithContents<C> {
                 width,
                 height,
                 images: self.surface.vk_images(),
+                format: self.surface.vk_format(),
             })?;
 
             self.contents_valid = true;

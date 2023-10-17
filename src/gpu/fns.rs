@@ -723,6 +723,14 @@ impl Fns {
         (self.device_v1_0.cmd_end_render_pass)(buffer);
     }
 
+    pub unsafe fn cmd_next_subpass(
+        &self,
+        buffer: vk::CommandBuffer,
+        contents: vk::SubpassContents,
+    ) {
+        (self.device_v1_0.cmd_next_subpass)(buffer, contents);
+    }
+
     //
     // QUEUE FUNCTIONS
     //
