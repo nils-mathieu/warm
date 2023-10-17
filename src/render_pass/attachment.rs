@@ -1,6 +1,5 @@
 //! Defines the [`Attachment`] trait.
 
-use std::any::TypeId;
 use std::sync::Arc;
 
 use ash::vk;
@@ -8,6 +7,8 @@ use ash::vk;
 use crate::gpu::Gpu;
 use crate::surface::ImagesInfo;
 use crate::VulkanError;
+
+use super::{RenderPassBuilder, RenderPassError};
 
 /// A trait for types that may be used as an attachment in a [`RenderPass`](super::RenderPass).
 pub trait Attachment: 'static {
@@ -17,7 +18,7 @@ pub trait Attachment: 'static {
     type ClearValue: ClearValue;
 
     /// Creates an [`vk::AttachmentDescription`] for this attachment type.
-    fn description(&self) -> vk::AttachmentDescription;
+    fn description(&self) -> Result<vk::AttachmentDescription, RenderPassError>;
 
     /// Returns the [`vk::ImageView`] of this attachment.
     ///
@@ -62,8 +63,8 @@ impl OutputAttachment {
 impl Attachment for OutputAttachment {
     type ClearValue = ClearColorValue<f32>;
 
-    fn description(&self) -> vk::AttachmentDescription {
-        vk::AttachmentDescription {
+    fn description(&self) -> Result<vk::AttachmentDescription, RenderPassError> {
+        Ok(vk::AttachmentDescription {
             initial_layout: vk::ImageLayout::UNDEFINED,
             final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
             flags: vk::AttachmentDescriptionFlags::empty(),
@@ -73,7 +74,7 @@ impl Attachment for OutputAttachment {
             stencil_load_op: vk::AttachmentLoadOp::DONT_CARE,
             stencil_store_op: vk::AttachmentStoreOp::DONT_CARE,
             samples: vk::SampleCountFlags::TYPE_1,
-        }
+        })
     }
 
     #[inline(always)]
@@ -174,7 +175,7 @@ pub trait AttachmentList {
     fn notify_output_changed(&mut self, info: &ImagesInfo) -> Result<(), VulkanError>;
 
     /// Calls a function for each attachment in this list.
-    fn register(&self, register: impl FnMut(TypeId, vk::AttachmentDescription));
+    fn register(&self, builder: &mut RenderPassBuilder) -> Result<(), RenderPassError>;
 }
 
 macro_rules! impl_AttachmentList {
@@ -222,12 +223,14 @@ macro_rules! impl_AttachmentList {
                 Ok(())
             }
 
-            fn register(&self, mut register: impl FnMut(TypeId, vk::AttachmentDescription)) {
+            fn register(&self, builder: &mut RenderPassBuilder) -> Result<(), RenderPassError> {
                 let ( $($T,)* ) = self;
 
                 $(
-                    register(TypeId::of::<$T>(), $T.description());
+                    builder.register_attachment($T)?;
                 )*
+
+                Ok(())
             }
         }
     };

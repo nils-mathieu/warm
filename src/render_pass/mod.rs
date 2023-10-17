@@ -1,7 +1,6 @@
 //! Defines the [`RenderPass`] type, which implements the [`SurfaceContents`] trait.
 
 use std::any::TypeId;
-use std::cell::RefCell;
 use std::fmt;
 use std::sync::Arc;
 
@@ -15,8 +14,8 @@ use crate::VulkanError;
 pub mod attachment;
 pub mod subpass;
 
-use self::attachment::AttachmentList;
-use self::subpass::{SubpassDescription, SubpassList};
+use self::attachment::{Attachment, AttachmentList};
+use self::subpass::{Subpass, SubpassList};
 
 mod error;
 
@@ -220,28 +219,12 @@ where
         attachments: Attachments,
         subpasses: Subpasses,
     ) -> Result<Self, RenderPassError> {
-        let builder = RefCell::new(RenderPassCreateInfoBuilder::default());
-        let mut error = None;
+        let mut builder = RenderPassBuilder::default();
 
-        attachments.register(|id, desc| builder.borrow_mut().register_attachment(id, desc));
-        subpasses.register(
-            |id, layout| match builder.borrow_mut().request_attachment(id, layout) {
-                Some(index) => index,
-                None => {
-                    if error.is_none() {
-                        error = Some(RenderPassError::MissingAttachment);
-                    }
-                    usize::MAX
-                }
-            },
-            |info| builder.borrow_mut().register_subpass(info),
-        );
+        attachments.register(&mut builder)?;
+        subpasses.register(&mut builder)?;
 
-        if let Some(err) = error {
-            return Err(err);
-        }
-
-        let info = builder.borrow_mut().build();
+        let info = builder.build();
 
         let render_pass = unsafe { gpu.vk_fns().create_render_pass(gpu.vk_device(), &info)? };
         let render_pass = ScopeGuard::new(render_pass, |r| unsafe {
@@ -494,8 +477,10 @@ where
 
 /// Contains the state required to create a [`vk::RenderPassCreateInfo`] instance from an
 /// [`AttachmentList`] and [`SubpassList`] implementations.
-#[derive(Default)]
-struct RenderPassCreateInfoBuilder {
+///
+/// An instance of this type is passed to [`Subpass`] implementations.
+#[derive(Debug, Default)]
+pub struct RenderPassBuilder {
     /// The list of all requested attachments.
     attachment_descs: Vec<vk::AttachmentDescription>,
     /// The list of all requested attachment references.
@@ -503,6 +488,8 @@ struct RenderPassCreateInfoBuilder {
 
     /// The list of all requested attachment references.
     attachment_refs: Vec<vk::AttachmentReference>,
+    /// The lsit of all requested attachment indices.
+    attachments: Vec<u32>,
     /// The list of all requested subpasses.
     subpass_descs: Vec<vk::SubpassDescription>,
 
@@ -510,11 +497,18 @@ struct RenderPassCreateInfoBuilder {
     dependencies: Vec<vk::SubpassDependency>,
 }
 
-impl RenderPassCreateInfoBuilder {
+impl RenderPassBuilder {
     /// Registers an attachment with the provided builder.
-    pub fn register_attachment(&mut self, id: TypeId, desc: vk::AttachmentDescription) {
+    pub fn register_attachment<A: Attachment>(
+        &mut self,
+        attachment: &A,
+    ) -> Result<(), RenderPassError> {
+        let desc = attachment.description()?;
+
         self.attachment_descs.push(desc);
-        self.attachment_ids.push(id);
+        self.attachment_ids.push(TypeId::of::<A>());
+
+        Ok(())
     }
 
     /// Requests an attachment, adding an attachment reference in the list of attachment
@@ -523,12 +517,16 @@ impl RenderPassCreateInfoBuilder {
     /// # Errors
     ///
     /// This function returns `None` if the attachment is not found.
-    pub fn request_attachment(&mut self, id: TypeId, layout: vk::ImageLayout) -> Option<usize> {
-        let index = self.attachment_ids.iter().position(|i| i == &id)?;
-        let index = index as u32;
+    pub fn request_attachment_ref<A: Attachment>(
+        &mut self,
+        layout: vk::ImageLayout,
+    ) -> Option<usize> {
+        self._request_attachment_ref(TypeId::of::<A>(), layout)
+    }
 
+    fn _request_attachment_ref(&mut self, id: TypeId, layout: vk::ImageLayout) -> Option<usize> {
         let attachment_ref = vk::AttachmentReference {
-            attachment: index,
+            attachment: self.attachment_ids.iter().position(|i| i == &id)? as u32,
             layout,
         };
 
@@ -538,20 +536,39 @@ impl RenderPassCreateInfoBuilder {
         Some(ret)
     }
 
+    /// Requests an attachment by its [`TypeId`].
+    pub fn request_attachment<A: Attachment>(&mut self) -> Option<usize> {
+        self._request_attachment(TypeId::of::<A>())
+    }
+
+    #[inline]
+    fn _request_attachment(&mut self, id: TypeId) -> Option<usize> {
+        let index = self.attachment_ids.iter().position(|i| i == &id)?;
+
+        let ret = self.attachments.len();
+        self.attachments.push(index as u32);
+        Some(ret)
+    }
+
     /// Registers a subpass.
-    pub fn register_subpass(&mut self, info: SubpassDescription) {
+    #[rustfmt::skip]
+    pub fn register_subpass<S: Subpass>(&mut self, subpass: &S) -> Result<(), RenderPassError> {
+        let desc = subpass.register(self)?;
+
         self.subpass_descs.push(vk::SubpassDescription {
-            color_attachment_count: info.color_attachment_count as u32,
-            p_color_attachments: info.first_color_attachment as *const _,
+            color_attachment_count: desc.color_attachment_count as u32,
+            p_color_attachments: desc.first_color_attachment as *const _,
             p_resolve_attachments: std::ptr::null(),
             pipeline_bind_point: vk::PipelineBindPoint::GRAPHICS,
             flags: vk::SubpassDescriptionFlags::empty(),
-            input_attachment_count: 0,
-            p_input_attachments: std::ptr::null(),
-            p_depth_stencil_attachment: std::ptr::null(),
-            preserve_attachment_count: 0,
-            p_preserve_attachments: std::ptr::null(),
+            input_attachment_count: desc.input_attachment_count as u32,
+            p_input_attachments: desc.first_input_attachment as *const _,
+            p_depth_stencil_attachment: desc.depth_stencil_attachment.unwrap_or(usize::MAX) as *const _,
+            preserve_attachment_count: desc.preserve_attachment_count as u32,
+            p_preserve_attachments: desc.first_preserve_attachment as *const _,
         });
+
+        Ok(())
     }
 
     /// Builds a [`vk::RenderPassCreateInfo`] instance from the registered attachments and
@@ -570,6 +587,33 @@ impl RenderPassCreateInfoBuilder {
                     .wrapping_add(desc.p_color_attachments as usize);
             } else {
                 desc.p_color_attachments = std::ptr::null();
+            }
+
+            if desc.input_attachment_count > 0 {
+                desc.p_input_attachments = self
+                    .attachment_refs
+                    .as_ptr()
+                    .wrapping_add(desc.p_input_attachments as usize);
+            } else {
+                desc.p_input_attachments = std::ptr::null();
+            }
+
+            if desc.p_depth_stencil_attachment as usize != usize::MAX {
+                desc.p_depth_stencil_attachment = self
+                    .attachment_refs
+                    .as_ptr()
+                    .wrapping_add(desc.p_depth_stencil_attachment as usize);
+            } else {
+                desc.p_depth_stencil_attachment = std::ptr::null();
+            }
+
+            if desc.preserve_attachment_count > 0 {
+                desc.p_preserve_attachments = self
+                    .attachments
+                    .as_ptr()
+                    .wrapping_add(desc.p_preserve_attachments as usize);
+            } else {
+                desc.p_preserve_attachments = std::ptr::null();
             }
         }
 
