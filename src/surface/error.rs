@@ -4,7 +4,7 @@ use std::fmt;
 
 /// An error that might occur when creating or interacting with a [`Surface`](super::Surface).
 #[derive(Debug, Clone)]
-pub enum SurfaceError<C = std::convert::Infallible> {
+pub enum SurfaceError {
     /// Vulkan behaved in an unexpected way.
     UnexpectedVulkanBehavior,
     /// The GPU does not support the provided surface.
@@ -13,25 +13,16 @@ pub enum SurfaceError<C = std::convert::Infallible> {
     Lost,
     /// The configuration provided is incompatible with the surface.
     InvalidConfig,
-    /// The [`SurfaceContents`](super::SurfaceContents) implementation failed.
-    Contents(C),
 }
 
-impl SurfaceError {
-    /// Casts this [`SurfaceError`] to another [`SurfaceError<C>`] with any type parameter
-    /// `C`.
-    pub fn cast_contents<C>(self) -> SurfaceError<C> {
-        match self {
-            Self::UnexpectedVulkanBehavior => SurfaceError::UnexpectedVulkanBehavior,
-            Self::NotSupported => SurfaceError::NotSupported,
-            Self::Lost => SurfaceError::Lost,
-            Self::InvalidConfig => SurfaceError::InvalidConfig,
-            Self::Contents(never) => match never {},
-        }
+impl From<UnexpectedVulkanBehavior> for SurfaceError {
+    #[inline(always)]
+    fn from(_: UnexpectedVulkanBehavior) -> Self {
+        Self::UnexpectedVulkanBehavior
     }
 }
 
-impl<C: fmt::Display> fmt::Display for SurfaceError<C> {
+impl fmt::Display for SurfaceError {
     #[rustfmt::skip]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
@@ -39,23 +30,15 @@ impl<C: fmt::Display> fmt::Display for SurfaceError<C> {
             Self::NotSupported => write!(f, "the GPU does the support the surface"),
             Self::Lost => write!(f, "the surface has been lost"),
             Self::InvalidConfig => write!(f, "the configuration provided is incompatible with the surface"),
-            Self::Contents(ref contents) => fmt::Display::fmt(contents, f),
         }
     }
 }
 
-impl<C: std::error::Error> std::error::Error for SurfaceError<C> {
-    fn cause(&self) -> Option<&dyn std::error::Error> {
-        match *self {
-            Self::Contents(ref contents) => Some(contents),
-            _ => None,
-        }
-    }
-}
+impl std::error::Error for SurfaceError {}
 
 /// An error that might occur when presenting an image to the surface.
 #[derive(Debug, Clone)]
-pub enum PresentError<Contents> {
+pub enum PresentError {
     /// Vulkan behaved in an unexpected way.
     UnexpectedVulkanBehavior,
     /// The surface has been lost.
@@ -66,11 +49,16 @@ pub enum PresentError<Contents> {
     Timeout,
     /// The swapchain has been retired.
     SwapchainRetired,
-    /// The [`SurfaceContents`](super::SurfaceContents) implementation failed.
-    Contents(Contents),
 }
 
-impl<C: fmt::Display> fmt::Display for PresentError<C> {
+impl From<UnexpectedVulkanBehavior> for PresentError {
+    #[inline(always)]
+    fn from(_: UnexpectedVulkanBehavior) -> Self {
+        Self::UnexpectedVulkanBehavior
+    }
+}
+
+impl fmt::Display for PresentError {
     #[rustfmt::skip]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
@@ -79,16 +67,20 @@ impl<C: fmt::Display> fmt::Display for PresentError<C> {
             Self::OutOfDate => write!(f, "the surface is out of date"),
             Self::Timeout => write!(f, "no image could be acquired within the desired timeout"),
             Self::SwapchainRetired => write!(f, "the swapchain is retired and must be recreated"),
-            Self::Contents(ref contents) => write!(f, "the surface contents failed: {}", contents),
         }
     }
 }
 
-impl<C: std::error::Error> std::error::Error for PresentError<C> {
-    fn cause(&self) -> Option<&dyn std::error::Error> {
-        match *self {
-            Self::Contents(ref contents) => Some(contents),
-            _ => None,
-        }
+impl std::error::Error for PresentError {}
+
+/// An error that might occur when interacting with the Vulkan API.
+#[derive(Debug, Clone, Copy)]
+pub struct UnexpectedVulkanBehavior;
+
+impl fmt::Display for UnexpectedVulkanBehavior {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Vulkan implementation behaved unexpectedly")
     }
 }
+
+impl std::error::Error for UnexpectedVulkanBehavior {}

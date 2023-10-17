@@ -6,7 +6,7 @@ use ash::vk;
 
 use crate::gpu::Gpu;
 
-use super::{PresentError, Surface, SurfaceConfig, SurfaceError};
+use super::{PresentError, Surface, SurfaceConfig, SurfaceError, UnexpectedVulkanBehavior};
 
 /// Contains data that's relative to a frame being rendered.
 #[derive(Debug)]
@@ -111,9 +111,6 @@ pub struct ImagesInfo<'a> {
 ///   semaphores you push to that vector depend on the `acquired_semaphore`, you can simply push
 ///   the `acquired_semaphore` object iself to the vector.
 pub unsafe trait SurfaceContents {
-    /// An error that might occur when using this [`SurfaceContents`] implementation.
-    type Error;
-
     /// Some arguments passed to the [`SurfaceContents::render`] method.
     type Args<'a>;
 
@@ -136,7 +133,10 @@ pub unsafe trait SurfaceContents {
     ///
     /// If the [`SurfaceContents`] implementation depends on a [`Gpu`] connection, the provided
     /// images must belong to that same [`Gpu`] instance.
-    unsafe fn notify_new_images(&mut self, info: ImagesInfo) -> Result<(), Self::Error>;
+    unsafe fn notify_new_images(
+        &mut self,
+        info: ImagesInfo,
+    ) -> Result<(), UnexpectedVulkanBehavior>;
 
     /// Renders the contents of the surface to the given image.
     ///
@@ -152,7 +152,7 @@ pub unsafe trait SurfaceContents {
         &mut self,
         ctx: &mut FrameContext,
         args: Self::Args<'_>,
-    ) -> Result<(), Self::Error>;
+    ) -> Result<(), UnexpectedVulkanBehavior>;
 }
 
 /// Wraps a [`Surface`] and a [`SurfaceContents`] to keep up-to-date with it.
@@ -234,7 +234,7 @@ impl<C: SurfaceContents> SurfaceWithContents<C> {
     pub unsafe fn configure_unchecked(
         &mut self,
         config: SurfaceConfig,
-    ) -> Result<(), SurfaceError<C::Error>> {
+    ) -> Result<(), SurfaceError> {
         unsafe {
             let width = config.width;
             let height = config.height;
@@ -244,17 +244,14 @@ impl<C: SurfaceContents> SurfaceWithContents<C> {
                 self.contents_valid = false;
             }
 
-            self.surface
-                .configure_unchecked(config)
-                .map_err(SurfaceError::cast_contents)?;
+            self.surface.configure_unchecked(config)?;
 
-            self.contents
-                .notify_new_images(ImagesInfo {
-                    width,
-                    height,
-                    images: self.surface.vk_images(),
-                })
-                .map_err(SurfaceError::Contents)?;
+            self.contents.notify_new_images(ImagesInfo {
+                width,
+                height,
+                images: self.surface.vk_images(),
+            })?;
+
             self.contents_valid = true;
         }
 
@@ -265,11 +262,8 @@ impl<C: SurfaceContents> SurfaceWithContents<C> {
     /// [`SurfaceContents`] implementation.
     ///
     /// More information in the documentation for [`Surface::configure`].
-    pub fn configure(&mut self, config: SurfaceConfig) -> Result<(), SurfaceError<C::Error>> {
-        let caps = self
-            .surface
-            .capabilities()
-            .map_err(SurfaceError::cast_contents)?;
+    pub fn configure(&mut self, config: SurfaceConfig) -> Result<(), SurfaceError> {
+        let caps = self.surface.capabilities()?;
         if !caps.is_config_valid(&config) {
             return Err(SurfaceError::InvalidConfig);
         }
@@ -279,7 +273,7 @@ impl<C: SurfaceContents> SurfaceWithContents<C> {
 
     /// Presents an additional image to the surface, using the managed [`SurfaceContents`]
     /// implementation.
-    pub fn present(&mut self, args: C::Args<'_>) -> Result<(), PresentError<C::Error>> {
+    pub fn present(&mut self, args: C::Args<'_>) -> Result<(), PresentError> {
         if !self.contents_valid {
             return Err(PresentError::OutOfDate);
         }

@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use crate::gpu::Gpu;
-use crate::surface::{FrameContext, ImagesInfo, SurfaceContents};
+use crate::surface::{FrameContext, ImagesInfo, SurfaceContents, UnexpectedVulkanBehavior};
 
 pub mod attachment;
 pub mod subpass;
@@ -35,14 +35,16 @@ where
     Attachments: AttachmentList,
     Subpasses: SubpassList,
 {
-    type Error = RenderPassError;
     type Args<'a> = RenderPassArgs<'a, Attachments, Subpasses>;
 
     unsafe fn notify_destroy_images(&mut self) {
         unimplemented!();
     }
 
-    unsafe fn notify_new_images(&mut self, info: ImagesInfo) -> Result<(), Self::Error> {
+    unsafe fn notify_new_images(
+        &mut self,
+        info: ImagesInfo,
+    ) -> Result<(), UnexpectedVulkanBehavior> {
         unimplemented!();
     }
 
@@ -50,7 +52,7 @@ where
         &mut self,
         ctx: &mut FrameContext,
         args: Self::Args<'_>,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), UnexpectedVulkanBehavior> {
         unimplemented!();
     }
 }

@@ -341,7 +341,7 @@ impl Surface {
         &mut self,
         contents: &mut C,
         args: C::Args<'_>,
-    ) -> Result<(), PresentError<C::Error>>
+    ) -> Result<(), PresentError>
     where
         C: SurfaceContents,
     {
@@ -376,9 +376,7 @@ impl Surface {
                 image: *self.images.get_unchecked(image_index as usize),
             };
 
-            contents
-                .render(&mut context, args)
-                .map_err(PresentError::Contents)?;
+            contents.render(&mut context, args)?;
 
             let present_info = vk::PresentInfoKHR {
                 p_image_indices: &image_index,
@@ -525,8 +523,8 @@ fn vk_to_surface_err(err: vk::Result) -> SurfaceError {
     }
 }
 
-/// Converts a regular Vulkan result into a [`PresentError<C>`].
-fn vk_to_present_err<C>(err: vk::Result) -> PresentError<C> {
+/// Converts a regular Vulkan result into a [`PresentError`].
+fn vk_to_present_err(err: vk::Result) -> PresentError {
     match err {
         vk::Result::ERROR_SURFACE_LOST_KHR => PresentError::Lost,
         vk::Result::ERROR_OUT_OF_DATE_KHR => PresentError::OutOfDate,
