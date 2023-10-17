@@ -172,7 +172,10 @@ impl<C> SurfaceWithContents<C> {
     ///
     /// # Safety
     ///
-    /// The provided [`SurfaceContents`] implementation must be in the **Invalid** state.
+    /// - The provided [`SurfaceContents`] implementation must be in the **Invalid** state.
+    ///
+    /// - If the provided [`SurfaceContents`] implementation is associated with a [`Gpu`], it must
+    ///   be the same [`Gpu`] instance as the one used by the surface.
     pub unsafe fn new(surface: Surface, contents: C) -> Self {
         Self {
             surface,
