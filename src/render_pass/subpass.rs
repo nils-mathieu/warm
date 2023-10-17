@@ -38,6 +38,26 @@ pub trait Subpass {
     fn record(&mut self, args: Self::Args<'_>);
 }
 
+/// A [`Subpass`] that does nothing.
+#[derive(Debug)]
+pub struct EmptySubpass;
+
+impl Subpass for EmptySubpass {
+    fn description(
+        &self,
+        _request_attachment: impl FnMut(TypeId, vk::ImageLayout) -> usize,
+    ) -> SubpassDescription {
+        SubpassDescription {
+            first_color_attachment: 0,
+            color_attachment_count: 0,
+        }
+    }
+
+    type Args<'a> = ();
+
+    fn record(&mut self, (): Self::Args<'_>) {}
+}
+
 /// A list of [`Subpass`]es.
 pub trait SubpassList {
     /// Registers a number of [`SubpassDescription`]s with the given closure.
