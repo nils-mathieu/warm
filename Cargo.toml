@@ -1,0 +1,12 @@
+[package]
+name = "warm"
+version = "0.1.0"
+edition = "2021"
+authors = ["Nils Mathieu <nmathieu@student.42>"]
+description = "A thin wrapper around the Vulkan API."
+publish = false
+
+[dependencies]
+ash = { version = "0.34", default-features = false }
+libloading = "0.6"
+raw-window-handle = "0.6"
