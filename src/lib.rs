@@ -2,3 +2,6 @@
 
 mod library;
 pub use library::*;
+
+mod instance;
+pub use instance::*;
