@@ -12,4 +12,7 @@ pub use error::*;
 mod physical_device;
 pub use physical_device::*;
 
+mod surface;
+pub use surface::*;
+
 mod utility;

@@ -69,7 +69,7 @@ impl PhysicalDevice {
 
     /// Returns the Vulkan handle for this physical device.
     #[inline(always)]
-    pub fn vk_handle(&self) -> vk::PhysicalDevice {
+    pub fn handle(&self) -> vk::PhysicalDevice {
         self.handle
     }
 }

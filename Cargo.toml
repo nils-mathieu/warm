@@ -6,9 +6,12 @@ authors = ["Nils Mathieu <nmathieu@student.42>"]
 description = "A thin wrapper around the Vulkan API."
 publish = false
 
+[features]
+default = ["raw-window-handle"]
+
 [dependencies]
 ash = { version = "0.34", default-features = false }
 libloading = "0.6"
-raw-window-handle = "0.6"
+raw-window-handle = { version = "0.6", optional = true }
 bitflags = "2"
 smallvec = "1"

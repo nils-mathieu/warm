@@ -71,6 +71,7 @@ pub struct InstanceFns {
     pub destroy_instance: vk::PFN_vkDestroyInstance,
     pub enumerate_physical_devices: vk::PFN_vkEnumeratePhysicalDevices,
     pub get_physical_device_properties: vk::PFN_vkGetPhysicalDeviceProperties,
+    pub destroy_surface: vk::PFN_vkDestroySurfaceKHR,
 }
 
 impl InstanceFns {
@@ -94,6 +95,7 @@ impl InstanceFns {
             destroy_instance: load!(vkDestroyInstance),
             enumerate_physical_devices: load!(vkEnumeratePhysicalDevices),
             get_physical_device_properties: load!(vkGetPhysicalDeviceProperties),
+            destroy_surface: load!(vkDestroySurfaceKHR),
         }
     }
 }
@@ -234,7 +236,7 @@ impl Instance {
 
     /// Returns the raw Vulkan handle.
     #[inline(always)]
-    pub fn vk_handle(&self) -> vk::Instance {
+    pub fn handle(&self) -> vk::Instance {
         self.handle
     }
 }
