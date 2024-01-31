@@ -67,7 +67,7 @@ impl<A: smallvec::Array> VectorLike for SmallVec<A> {
 
 /// Some Vulkan function allow retrieving a list of values. This function allows reading those
 /// values into a vector.
-pub(crate) unsafe fn read_into_vector<V: ?Sized + VectorLike>(
+pub unsafe fn read_into_vector<V: ?Sized + VectorLike>(
     v: &mut V,
     mut f: impl FnMut(*mut u32, *mut V::Item) -> vk::Result,
 ) -> vk::Result {

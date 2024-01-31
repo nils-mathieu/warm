@@ -5,7 +5,7 @@ use std::sync::Arc;
 use ash::vk;
 use smallvec::SmallVec;
 
-use crate::{Instance, PresentModes, Result, Surface};
+use crate::{ColorSpace, Format, Instance, PresentModes, Result, Surface};
 
 /// A physical device.
 #[derive(Debug, Clone)]
@@ -100,14 +100,18 @@ impl PhysicalDevice {
         }
     }
 
-    /// Pushes the list of surface formats supported by this physical device for the provided
-    /// surface into the provided collection.
-    pub fn push_surface_formats<V>(&self, surface: &Surface, collection: &mut V) -> Result<()>
-    where
-        V: ?Sized + crate::utility::VectorLike<Item = vk::SurfaceFormatKHR>,
-    {
+    /// Returns an iterator over the list of supported surface formats for the provided surface.
+    #[doc(alias = "vkGetPhysicalDeviceSurfaceFormats")]
+    pub fn surface_supported_formats(
+        &self,
+        surface: &Surface,
+    ) -> Result<impl Iterator<Item = (Format, ColorSpace)>> {
+        assert!(Arc::ptr_eq(self.instance(), surface.instance()));
+
+        let mut vec = Vec::new();
+
         let ret = unsafe {
-            crate::utility::read_into_vector(collection, |count, data| {
+            crate::utility::read_into_vector(&mut vec, |count, data| {
                 (self.instance.fns().get_physical_device_surface_formats)(
                     self.handle,
                     surface.handle(),
@@ -120,7 +124,14 @@ impl PhysicalDevice {
         if ret != vk::Result::SUCCESS {
             Err(ret.into())
         } else {
-            Ok(())
+            let iter = vec.into_iter().map(|surface_format| {
+                (
+                    Format::from_raw(surface_format.format),
+                    ColorSpace::from_raw(surface_format.color_space),
+                )
+            });
+
+            Ok(iter)
         }
     }
 

@@ -21,4 +21,4 @@ pub use swapchain::*;
 mod format;
 pub use format::*;
 
-pub mod utility;
+mod utility;
