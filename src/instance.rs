@@ -68,8 +68,9 @@ impl InstanceExtensions {
 /// A collection of Vulkan functions that have been loaded for a specific [`Instance`].
 #[derive(Debug)]
 pub struct InstanceFns {
-    destroy_instance: vk::PFN_vkDestroyInstance,
-    enumerate_physical_devices: vk::PFN_vkEnumeratePhysicalDevices,
+    pub destroy_instance: vk::PFN_vkDestroyInstance,
+    pub enumerate_physical_devices: vk::PFN_vkEnumeratePhysicalDevices,
+    pub get_physical_device_properties: vk::PFN_vkGetPhysicalDeviceProperties,
 }
 
 impl InstanceFns {
@@ -92,6 +93,7 @@ impl InstanceFns {
         Self {
             destroy_instance: load!(vkDestroyInstance),
             enumerate_physical_devices: load!(vkEnumeratePhysicalDevices),
+            get_physical_device_properties: load!(vkGetPhysicalDeviceProperties),
         }
     }
 }
