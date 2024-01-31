@@ -8,3 +8,8 @@ pub use instance::*;
 
 mod error;
 pub use error::*;
+
+mod physical_device;
+pub use physical_device::*;
+
+mod utility;

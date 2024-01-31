@@ -1,23 +1,24 @@
 use bitflags::bitflags;
 use smallvec::SmallVec;
 use std::ffi::{c_char, CStr};
+use std::fmt::Debug;
 use std::sync::Arc;
 
 use ash::vk;
 
-use crate::{Error, Library, Result};
+use crate::{Error, Library, PhysicalDevice, Result};
 
 /// The parameters passed to the [`Vulkan::new`] function.
 #[derive(Debug, Clone)]
 pub struct InstanceDesc<'a> {
     /// The name of the application creating the instance.
-    pub application_name: &'a str,
+    pub application_name: Option<&'a str>,
     /// The version of the application creating the instance.
     ///
     /// The number is not encoded in any particular format.
     pub application_version: u32,
     /// The name of the engine creating the instance.
-    pub engine_name: &'a str,
+    pub engine_name: Option<&'a str>,
     /// The version of the engine creating the instance.
     ///
     /// The number is not encoded in any particular format.
@@ -68,6 +69,7 @@ impl InstanceExtensions {
 #[derive(Debug)]
 pub struct InstanceFns {
     destroy_instance: vk::PFN_vkDestroyInstance,
+    enumerate_physical_devices: vk::PFN_vkEnumeratePhysicalDevices,
 }
 
 impl InstanceFns {
@@ -89,6 +91,7 @@ impl InstanceFns {
 
         Self {
             destroy_instance: load!(vkDestroyInstance),
+            enumerate_physical_devices: load!(vkEnumeratePhysicalDevices),
         }
     }
 }
@@ -127,7 +130,7 @@ impl Instance {
 
     /// Creates a new Vulkan instance.
     #[doc(alias = "vkCreateInstance")]
-    pub fn new(library: Arc<Library>, create_info: &InstanceDesc) -> Result<Arc<Self>> {
+    pub fn new(library: Arc<Library>, create_info: InstanceDesc) -> Result<Arc<Self>> {
         // Determine the name of the extensions that were requested.
         let enabled_extensions = create_info
             .extensions
@@ -154,10 +157,14 @@ impl Instance {
         };
 
         let application_info = vk::ApplicationInfo {
-            p_application_name: create_info.application_name.as_ptr() as *const c_char,
+            p_application_name: create_info
+                .application_name
+                .map_or(core::ptr::null(), |x| x.as_ptr() as *const c_char),
             application_version: create_info.application_version,
             api_version: requested_api_version,
-            p_engine_name: create_info.engine_name.as_ptr() as *const c_char,
+            p_engine_name: create_info
+                .engine_name
+                .map_or(core::ptr::null(), |x| x.as_ptr() as *const c_char),
             engine_version: create_info.engine_version,
 
             p_next: std::ptr::null(),
@@ -186,6 +193,31 @@ impl Instance {
         Ok(unsafe { Self::from_handle(library, handle) })
     }
 
+    /// Enumerates the physical devices that are available on this instance.
+    #[doc(alias = "vkEnumeratePhysicalDevices")]
+    pub fn enumerate_physical_devices(
+        self: &Arc<Self>,
+    ) -> Result<impl Iterator<Item = PhysicalDevice>> {
+        let mut handles = SmallVec::<[vk::PhysicalDevice; 4]>::new();
+
+        let ret = unsafe {
+            crate::utility::read_into_vector(&mut handles, |count, data| {
+                (self.fns.enumerate_physical_devices)(self.handle, count, data)
+            })
+        };
+
+        if ret != vk::Result::SUCCESS {
+            return Err(Error::from(ret));
+        }
+
+        let this = self.clone();
+        let iter = handles
+            .into_iter()
+            .map(move |handle| unsafe { PhysicalDevice::from_handle(this.clone(), handle) });
+
+        Ok(iter)
+    }
+
     /// Returns a reference to the parent [`Library`] of this instance.
     #[inline(always)]
     pub fn library(&self) -> &Arc<Library> {
@@ -197,6 +229,12 @@ impl Instance {
     pub fn fns(&self) -> &InstanceFns {
         &self.fns
     }
+
+    /// Returns the raw Vulkan handle.
+    #[inline(always)]
+    pub fn vk_handle(&self) -> vk::Instance {
+        self.handle
+    }
 }
 
 impl Drop for Instance {
@@ -204,5 +242,11 @@ impl Drop for Instance {
         unsafe {
             (self.fns.destroy_instance)(self.handle, std::ptr::null());
         }
+    }
+}
+
+impl Debug for Instance {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Instance").field(&self.handle).finish()
     }
 }
