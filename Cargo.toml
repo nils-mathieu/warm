@@ -10,4 +10,5 @@ publish = false
 ash = { version = "0.34", default-features = false }
 libloading = "0.6"
 raw-window-handle = "0.6"
-thiserror = "1"
+bitflags = "2"
+smallvec = "1"
