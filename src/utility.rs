@@ -9,6 +9,7 @@ pub trait VectorLike {
     type Item;
 
     /// Attempts to reserve additional capacity for this vector.
+    #[allow(clippy::result_unit_err)]
     fn try_reserve(&mut self, additional: usize) -> Result<(), ()>;
 
     /// Returns a reference to the spare capacity of this vector.
@@ -66,7 +67,7 @@ impl<A: smallvec::Array> VectorLike for SmallVec<A> {
 
 /// Some Vulkan function allow retrieving a list of values. This function allows reading those
 /// values into a vector.
-pub unsafe fn read_into_vector<V: VectorLike>(
+pub(crate) unsafe fn read_into_vector<V: ?Sized + VectorLike>(
     v: &mut V,
     mut f: impl FnMut(*mut u32, *mut V::Item) -> vk::Result,
 ) -> vk::Result {

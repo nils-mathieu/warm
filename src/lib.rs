@@ -18,4 +18,7 @@ pub use surface::*;
 mod swapchain;
 pub use swapchain::*;
 
-mod utility;
+mod format;
+pub use format::*;
+
+pub mod utility;

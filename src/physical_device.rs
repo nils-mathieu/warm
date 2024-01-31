@@ -100,6 +100,30 @@ impl PhysicalDevice {
         }
     }
 
+    /// Pushes the list of surface formats supported by this physical device for the provided
+    /// surface into the provided collection.
+    pub fn push_surface_formats<V>(&self, surface: &Surface, collection: &mut V) -> Result<()>
+    where
+        V: ?Sized + crate::utility::VectorLike<Item = vk::SurfaceFormatKHR>,
+    {
+        let ret = unsafe {
+            crate::utility::read_into_vector(collection, |count, data| {
+                (self.instance.fns().get_physical_device_surface_formats)(
+                    self.handle,
+                    surface.handle(),
+                    count,
+                    data,
+                )
+            })
+        };
+
+        if ret != vk::Result::SUCCESS {
+            Err(ret.into())
+        } else {
+            Ok(())
+        }
+    }
+
     /// Returns the instance that owns this physical device.
     #[inline(always)]
     pub fn instance(&self) -> &Arc<Instance> {
