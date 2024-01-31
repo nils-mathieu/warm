@@ -2,11 +2,12 @@ use ash::vk;
 
 /// The encoding format of a color.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(i32)]
 pub enum Format {
-    Rgba8Unorm,
-    Bgra8Unorm,
-    Srgb8Srgb,
-    Bgra8Srgb,
+    Rgba8Unorm = vk::Format::R8G8B8A8_UNORM.as_raw(),
+    Bgra8Unorm = vk::Format::B8G8R8A8_UNORM.as_raw(),
+    Srgb8Srgb = vk::Format::B8G8R8A8_SRGB.as_raw(),
+    Bgra8Srgb = vk::Format::R8G8B8A8_SRGB.as_raw(),
 }
 
 impl Format {
@@ -24,8 +25,9 @@ impl Format {
 
 /// The color-space associated with a color encoding format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(i32)]
 pub enum ColorSpace {
-    Srgb,
+    Srgb = vk::ColorSpaceKHR::SRGB_NONLINEAR.as_raw(),
 }
 
 impl ColorSpace {

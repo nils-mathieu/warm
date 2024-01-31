@@ -5,7 +5,10 @@ use std::sync::Arc;
 use ash::vk;
 use smallvec::SmallVec;
 
-use crate::{ColorSpace, Format, Instance, PresentModes, Result, Surface};
+use crate::{
+    ColorSpace, CompositeAlphas, Format, ImageUsages, Instance, PresentModes, Result, Surface,
+    SurfaceCaps, SurfaceTransform, SurfaceTransforms,
+};
 
 /// A physical device.
 #[derive(Debug, Clone)]
@@ -132,6 +135,69 @@ impl PhysicalDevice {
             });
 
             Ok(iter)
+        }
+    }
+
+    /// Returns the capabilities of a surface, when rendered to by this physical device.
+    pub fn surface_capabilities(&self, surface: &Surface) -> Result<SurfaceCaps> {
+        assert!(Arc::ptr_eq(self.instance(), surface.instance()));
+
+        let mut caps = MaybeUninit::<vk::SurfaceCapabilitiesKHR>::uninit();
+
+        let ret = unsafe {
+            (self.instance.fns().get_physical_device_surface_capabilities)(
+                self.handle,
+                surface.handle(),
+                caps.as_mut_ptr(),
+            )
+        };
+
+        if ret != vk::Result::SUCCESS {
+            Err(ret.into())
+        } else {
+            let caps = unsafe { caps.assume_init_ref() };
+
+            Ok(SurfaceCaps {
+                min_image_count: caps.min_image_count,
+                max_image_count: match caps.max_image_count {
+                    0 => None,
+                    x => Some(x),
+                },
+                current_extent: match (caps.current_extent.width, caps.current_extent.height) {
+                    (0xFFFFFFFF, _) | (_, 0xFFFFFFFF) => None,
+                    _ => Some([caps.current_extent.width, caps.current_extent.height]),
+                },
+                min_image_extent: [caps.min_image_extent.width, caps.min_image_extent.height],
+                max_image_extent: [caps.max_image_extent.width, caps.max_image_extent.height],
+                max_image_array_layers: caps.max_image_array_layers,
+                supported_transforms: SurfaceTransforms::from_bits_retain(
+                    caps.supported_transforms.as_raw(),
+                ),
+                current_transform: match caps.current_transform {
+                    vk::SurfaceTransformFlagsKHR::IDENTITY => SurfaceTransform::Identity,
+                    vk::SurfaceTransformFlagsKHR::ROTATE_90 => SurfaceTransform::Rotate90,
+                    vk::SurfaceTransformFlagsKHR::ROTATE_180 => SurfaceTransform::Rotate180,
+                    vk::SurfaceTransformFlagsKHR::ROTATE_270 => SurfaceTransform::Rotate270,
+                    vk::SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR => {
+                        SurfaceTransform::HorizontalMirror
+                    }
+                    vk::SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_ROTATE_90 => {
+                        SurfaceTransform::HorizontalMirrorRotate90
+                    }
+                    vk::SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_ROTATE_180 => {
+                        SurfaceTransform::HorizontalMirrorRotate180
+                    }
+                    vk::SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_ROTATE_270 => {
+                        SurfaceTransform::HorizontalMirrorRotate270
+                    }
+                    vk::SurfaceTransformFlagsKHR::INHERIT => SurfaceTransform::Inherit,
+                    unknown => unreachable!("unknown surface transform: {}", unknown.as_raw()),
+                },
+                supported_composite_alpha: CompositeAlphas::from_bits_retain(
+                    caps.supported_composite_alpha.as_raw(),
+                ),
+                supported_usage: ImageUsages::from_bits_retain(caps.supported_usage_flags.as_raw()),
+            })
         }
     }
 

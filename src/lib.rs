@@ -22,3 +22,6 @@ mod format;
 pub use format::*;
 
 mod utility;
+
+mod image;
+pub use image::*;
