@@ -63,6 +63,34 @@ impl InstanceExtensions {
             _ => panic!("multiple extension bits are set"),
         }
     }
+
+    /// Returns an instance of [`InstanceExtensions`] with the extensions required for the
+    /// provided [`raw_window_handle::RawWindowHandle`].
+    #[cfg(feature = "raw-window-handle")]
+    pub fn required_for_raw_display_handle(rdh: raw_window_handle::RawDisplayHandle) -> Self {
+        use raw_window_handle::RawDisplayHandle as Rdh;
+
+        match rdh {
+            Rdh::Windows(_) => Self::SURFACE | Self::WIN32_SURFACE,
+            Rdh::Xlib(_) => Self::SURFACE | Self::XLIB_SURFACE,
+            Rdh::Xcb(_) => Self::SURFACE | Self::XCB_SURFACE,
+            Rdh::Wayland(_) => Self::SURFACE | Self::WAYLAND_SURFACE,
+            _ => Self::empty(),
+        }
+    }
+
+    /// Returns an instance of [`InstanceExtensions`] with the extensions required for the
+    /// provided [`raw_window_handle::RawWindowHandle`].
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the provided window does not have a display handle.
+    pub fn required_for_window<W>(window: &W) -> Self
+    where
+        W: ?Sized + raw_window_handle::HasDisplayHandle,
+    {
+        Self::required_for_raw_display_handle(window.display_handle().unwrap().as_raw())
+    }
 }
 
 /// A collection of Vulkan functions that have been loaded for a specific [`Instance`].
