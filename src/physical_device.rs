@@ -3,8 +3,9 @@ use std::mem::MaybeUninit;
 use std::sync::Arc;
 
 use ash::vk;
+use smallvec::SmallVec;
 
-use crate::Instance;
+use crate::{Instance, PresentModes, Result, Surface};
 
 /// A physical device.
 #[derive(Debug, Clone)]
@@ -58,6 +59,44 @@ impl PhysicalDevice {
                 unknown => unreachable!("unknown device type: {}", unknown.as_raw()),
             },
             name,
+        }
+    }
+
+    /// Returns the list of present modes that the provided surface supports with this physical
+    /// device.
+    pub fn surface_present_modes(&self, surface: &Surface) -> Result<PresentModes> {
+        let mut list = SmallVec::<[vk::PresentModeKHR; 8]>::default();
+
+        let ret = unsafe {
+            crate::utility::read_into_vector(&mut list, |count, data| {
+                (self
+                    .instance
+                    .fns()
+                    .get_physical_device_surface_present_modes)(
+                    self.handle,
+                    surface.handle(),
+                    count,
+                    data,
+                )
+            })
+        };
+
+        if ret != vk::Result::SUCCESS {
+            Err(ret.into())
+        } else {
+            let modes = list
+                .iter()
+                .copied()
+                .map(|x| match x {
+                    vk::PresentModeKHR::IMMEDIATE => PresentModes::IMMEDIATE,
+                    vk::PresentModeKHR::MAILBOX => PresentModes::MAILBOX,
+                    vk::PresentModeKHR::FIFO => PresentModes::FIFO,
+                    vk::PresentModeKHR::FIFO_RELAXED => PresentModes::FIFO_RELAXED,
+                    unknown => unreachable!("unknown present mode: {}", unknown.as_raw()),
+                })
+                .collect();
+
+            Ok(modes)
         }
     }
 

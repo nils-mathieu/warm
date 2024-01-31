@@ -15,4 +15,7 @@ pub use physical_device::*;
 mod surface;
 pub use surface::*;
 
+mod swapchain;
+pub use swapchain::*;
+
 mod utility;

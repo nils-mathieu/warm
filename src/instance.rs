@@ -95,11 +95,16 @@ impl InstanceExtensions {
 
 /// A collection of Vulkan functions that have been loaded for a specific [`Instance`].
 #[derive(Debug)]
+#[rustfmt::skip]
 pub struct InstanceFns {
     pub destroy_instance: vk::PFN_vkDestroyInstance,
     pub enumerate_physical_devices: vk::PFN_vkEnumeratePhysicalDevices,
     pub get_physical_device_properties: vk::PFN_vkGetPhysicalDeviceProperties,
     pub destroy_surface: vk::PFN_vkDestroySurfaceKHR,
+    pub get_physical_device_surface_support: vk::PFN_vkGetPhysicalDeviceSurfaceSupportKHR,
+    pub get_physical_device_surface_capabilities: vk::PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR,
+    pub get_physical_device_surface_formats: vk::PFN_vkGetPhysicalDeviceSurfaceFormatsKHR,
+    pub get_physical_device_surface_present_modes: vk::PFN_vkGetPhysicalDeviceSurfacePresentModesKHR,
 }
 
 impl InstanceFns {
@@ -109,6 +114,7 @@ impl InstanceFns {
     ///
     /// The provided instance and entry point must come from the same Vulkan implementation. The
     /// handle must be valid.
+    #[rustfmt::skip]
     unsafe fn load(handle: vk::Instance, ep: vk::PFN_vkGetInstanceProcAddr) -> Self {
         macro_rules! load {
             ($name:ident) => {
@@ -124,6 +130,10 @@ impl InstanceFns {
             enumerate_physical_devices: load!(vkEnumeratePhysicalDevices),
             get_physical_device_properties: load!(vkGetPhysicalDeviceProperties),
             destroy_surface: load!(vkDestroySurfaceKHR),
+            get_physical_device_surface_support: load!(vkGetPhysicalDeviceSurfaceSupportKHR),
+            get_physical_device_surface_capabilities: load!(vkGetPhysicalDeviceSurfaceCapabilitiesKHR),
+            get_physical_device_surface_formats: load!(vkGetPhysicalDeviceSurfaceFormatsKHR),
+            get_physical_device_surface_present_modes: load!(vkGetPhysicalDeviceSurfacePresentModesKHR),
         }
     }
 }
