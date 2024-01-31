@@ -21,7 +21,13 @@ pub use swapchain::*;
 mod format;
 pub use format::*;
 
-mod utility;
-
 mod image;
 pub use image::*;
+
+mod sync;
+pub use sync::*;
+
+mod device;
+pub use device::*;
+
+mod utility;

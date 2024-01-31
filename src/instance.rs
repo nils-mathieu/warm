@@ -105,6 +105,8 @@ pub struct InstanceFns {
     pub get_physical_device_surface_capabilities: vk::PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR,
     pub get_physical_device_surface_formats: vk::PFN_vkGetPhysicalDeviceSurfaceFormatsKHR,
     pub get_physical_device_surface_present_modes: vk::PFN_vkGetPhysicalDeviceSurfacePresentModesKHR,
+    pub create_device: vk::PFN_vkCreateDevice,
+    pub get_device_proc_addr: vk::PFN_vkGetDeviceProcAddr,
 }
 
 impl InstanceFns {
@@ -134,6 +136,8 @@ impl InstanceFns {
             get_physical_device_surface_capabilities: load!(vkGetPhysicalDeviceSurfaceCapabilitiesKHR),
             get_physical_device_surface_formats: load!(vkGetPhysicalDeviceSurfaceFormatsKHR),
             get_physical_device_surface_present_modes: load!(vkGetPhysicalDeviceSurfacePresentModesKHR),
+            create_device: load!(vkCreateDevice),
+            get_device_proc_addr: load!(vkGetDeviceProcAddr),
         }
     }
 }

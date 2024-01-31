@@ -233,15 +233,16 @@ pub struct PhysicalDeviceInfo {
 
 /// The type of the device.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(i32)]
 pub enum DeviceType {
     /// The type of the device is unknown.
-    Other,
+    Other = vk::PhysicalDeviceType::OTHER.as_raw(),
     /// The GPU is integrated or tightly coupled with the host CPU.
-    IntegratedGpu,
+    IntegratedGpu = vk::PhysicalDeviceType::INTEGRATED_GPU.as_raw(),
     /// The GPU is typically a separate processor connected to the host via an interlink.
-    DiscreteGpu,
+    DiscreteGpu = vk::PhysicalDeviceType::DISCRETE_GPU.as_raw(),
     /// The GPU is a virtual node in a virtualization environment.
-    VirtualGpu,
+    VirtualGpu = vk::PhysicalDeviceType::VIRTUAL_GPU.as_raw(),
     /// The device is running on the same processor as the host.
-    Cpu,
+    Cpu = vk::PhysicalDeviceType::CPU.as_raw(),
 }

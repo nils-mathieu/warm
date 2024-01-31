@@ -1,7 +1,10 @@
+use std::mem::ManuallyDrop;
+use std::sync::Arc;
+
 use ash::vk;
 use bitflags::bitflags;
 
-use crate::ImageUsages;
+use crate::{ColorSpace, Device, Format, ImageUsages, Instance, Result, SharingMode, Surface};
 
 bitflags! {
     /// Flags specifying a collection of [`PresentMode`]s.
@@ -147,4 +150,160 @@ pub enum CompositeAlpha {
     PreMultiplied = vk::CompositeAlphaFlagsKHR::PRE_MULTIPLIED.as_raw(),
     PostMultiplied = vk::CompositeAlphaFlagsKHR::POST_MULTIPLIED.as_raw(),
     Inherit = vk::CompositeAlphaFlagsKHR::INHERIT.as_raw(),
+}
+
+/// Describes how to create a [`Swapchain`].
+#[derive(Debug, Clone)]
+#[doc(alias = "vkSwapchainCreateInfoKHR")]
+pub struct SwapchainDesc<'a> {
+    /// Whether the swapchain should allow occluded parts of the output surface to avoid being
+    /// rendered to.
+    ///
+    /// This is useful when the application that no side effects are required to be exected
+    /// for pixels that are not visible.
+    pub clipped: bool,
+
+    /// The composite alpha mode that the swapchain should use.
+    pub composite_alpha: CompositeAlpha,
+
+    /// The present mode that the swapchain should use.
+    pub present_mode: PresentMode,
+
+    /// The minimum number of images that the swapchain should use.
+    ///
+    /// Note that it's possible for the swapchain to use more images than requested.
+    pub min_image_count: u32,
+
+    /// The format that the swapchain should use for the images.
+    pub format: Format,
+
+    /// The color space that the swapchain should use for the images.
+    pub color_space: ColorSpace,
+
+    /// The size of the swapchain's images.
+    pub extent: [u32; 2],
+
+    /// The number of layers that the swapchain's images should have.
+    pub array_layers: u32,
+
+    /// The usage that the swapchain's images should have.
+    pub usage: ImageUsages,
+
+    /// The sharing mode of the swapchain images.
+    pub sharing_mode: SharingMode<&'a [u32]>,
+
+    /// A pre-transform to apply to the output image before it is presented to the surface.
+    pub pre_transform: SurfaceTransform,
+}
+
+/// A swapchain that can be used to present images to a surface.
+pub struct Swapchain {
+    /// The surface that the swapchain presents images to.
+    surface: Arc<Surface>,
+    /// The device that owns this swapchain.
+    device: Arc<Device>,
+
+    /// The Vulkan handle for the swapchain.
+    handle: vk::SwapchainKHR,
+}
+
+impl Swapchain {
+    /// Creates a new [`Swapchain`] instance.
+    pub fn new(device: Arc<Device>, surface: Arc<Surface>, desc: SwapchainDesc) -> Result<Self> {
+        create_swapchain(&desc, device, surface, vk::SwapchainKHR::null())
+    }
+
+    /// Re-creates this swapchain with the provided description.
+    pub fn recreate(self, desc: SwapchainDesc) -> Result<Self> {
+        let this = ManuallyDrop::new(self);
+
+        create_swapchain(
+            &desc,
+            this.device.clone(),
+            this.surface.clone(),
+            this.handle,
+        )
+    }
+
+    /// Returns the surface that this swapchain presents images to.
+    #[inline(always)]
+    pub fn surface(&self) -> &Arc<Surface> {
+        &self.surface
+    }
+
+    /// Returns the instance that owns this swapchain.
+    #[inline(always)]
+    pub fn instance(&self) -> &Arc<Instance> {
+        self.surface.instance()
+    }
+
+    /// Returns the Vulkan handle for this swapchain.
+    #[inline(always)]
+    pub fn handle(&self) -> vk::SwapchainKHR {
+        self.handle
+    }
+}
+
+/// Creates a new swapchain from the provided description.
+fn create_swapchain(
+    desc: &SwapchainDesc,
+    device: Arc<Device>,
+    surface: Arc<Surface>,
+    old_swapchain: vk::SwapchainKHR,
+) -> Result<Swapchain> {
+    let mut handle = vk::SwapchainKHR::null();
+
+    let mut create_info = vk::SwapchainCreateInfoKHR {
+        clipped: desc.clipped as vk::Bool32,
+        surface: surface.handle(),
+        composite_alpha: vk::CompositeAlphaFlagsKHR::from_raw(desc.composite_alpha as u32),
+        image_array_layers: desc.array_layers,
+        image_color_space: vk::ColorSpaceKHR::from_raw(desc.color_space as i32),
+        image_extent: vk::Extent2D {
+            width: desc.extent[0],
+            height: desc.extent[1],
+        },
+        flags: vk::SwapchainCreateFlagsKHR::empty(),
+        image_format: vk::Format::from_raw(desc.format as i32),
+        image_usage: vk::ImageUsageFlags::from_raw(desc.usage.bits()),
+        image_sharing_mode: vk::SharingMode::default(),
+        queue_family_index_count: 0,
+        p_queue_family_indices: std::ptr::null(),
+        min_image_count: desc.min_image_count,
+        pre_transform: vk::SurfaceTransformFlagsKHR::from_raw(desc.pre_transform as u32),
+        old_swapchain,
+        p_next: std::ptr::null(),
+        present_mode: vk::PresentModeKHR::from_raw(desc.present_mode as i32),
+        s_type: vk::StructureType::SWAPCHAIN_CREATE_INFO_KHR,
+    };
+
+    match desc.sharing_mode {
+        SharingMode::Exclusive => {
+            create_info.image_sharing_mode = vk::SharingMode::EXCLUSIVE;
+        }
+        SharingMode::Concurrent(indices) => {
+            create_info.image_sharing_mode = vk::SharingMode::CONCURRENT;
+            create_info.queue_family_index_count = indices.len() as u32;
+            create_info.p_queue_family_indices = indices.as_ptr();
+        }
+    };
+
+    let ret = unsafe {
+        (device.fns().create_swapchain)(
+            device.handle(),
+            &create_info,
+            std::ptr::null(),
+            &mut handle,
+        )
+    };
+
+    if ret != vk::Result::SUCCESS {
+        return Err(ret.into());
+    }
+
+    Ok(Swapchain {
+        handle,
+        device,
+        surface,
+    })
 }
